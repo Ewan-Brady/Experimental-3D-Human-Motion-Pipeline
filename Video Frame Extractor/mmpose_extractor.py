@@ -13,6 +13,7 @@ from mmpose.apis import inference_topdown, init_model
 from mmpose.registry import VISUALIZERS
 from mmpose.structures import merge_data_samples
 import os
+import numpy as np
 
 #Old args
 mmpose_path = "/mnt/c/AI_model/3DMovementModel/Video Pose Estimator/mmpose/"
@@ -64,15 +65,17 @@ def main():
                 if(len(results.pred_instances.keypoints) > 1):
                     raise Exception("Multiple keypoints in " + img)
                 
-                keypoint_frames = keypoint_frames + results.pred_instances.keypoints[0] #Add frame of data
+                keypoint_frames.append(results.pred_instances.keypoints[0]) #Add frame of data
+            
+            keypoint_frames = np.concatenate(keypoint_frames)
 
-            for i in range(1, len(keypoint_frames)):
-                if(len(keypoint_frames[i]) != len(keypoint_frames[i-1])): #Check for skeleton points variance.
-                    print("Variance in points detected in " + img)
-
-            target_location = outputDirectory + "/" + action + "/"  + img + ".skel"
-            with open(target_location, "w") as imagefile:
-                imagefile.write(str(keypoint_frames)) #Writes skeletondata frames to file, pretty simple format but can be decoded so it works.
+            target_location = outputDirectory + "/" + action + "/"  + folder
+            
+            np.save(target_location, keypoint_frames)
+            
+        print(action + " done...")
+        #with open(target_location, "w") as imagefile:
+        #    imagefile.write(str(keypoint_frames)) #Writes skeletondata frames to file, pretty simple format but can be decoded so it works.
             
 
 

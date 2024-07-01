@@ -65,15 +65,15 @@ for action in actions: #now that we have created the nessecary directories, we c
     os.chdir(action_output_directory) #return to output directory for action
     
     for video in videos:
-        try:    
-            frames_directory = (action_output_directory + "/" + video)
-            os.makedirs(frames_directory) #make directory for frames
-            os.chdir(frames_directory) #go to directory
+        #try:    
+        frames_directory = (action_output_directory + "/" + video)
+        os.makedirs(frames_directory) #make directory for frames
+        os.chdir(frames_directory) #go to directory
     
-            video_directory = (inputDirectory + "/" + action + "/" + video)
-            FrameCapture(video_directory,video) #Extract frames from video into present directory
-        except:
-            print("An error occured while splitting " + video)    
+        video_directory = (inputDirectory + "/" + action + "/" + video)
+        FrameCapture(video_directory,video) #Extract frames from video into present directory
+        #except:
+            #print("An error occured while splitting " + video)    
         
     print(action + " done...")
 
