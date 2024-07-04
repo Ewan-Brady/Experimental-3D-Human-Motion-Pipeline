@@ -5,6 +5,7 @@ sys.path.append(depth_anything_directory)
 os.chdir(depth_anything_directory)
 
 #Do imports in the correct directory
+import numpy as np
 import argparse
 import cv2
 import numpy as np
@@ -56,64 +57,118 @@ transform = Compose([
 
 
 # Define the codec and create VideoWriter object
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'x264' might also be available
-out_video = cv2.VideoWriter("output_video.mp4", fourcc, 30.0, (640,480))
+#fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'x264' might also be available
+#out_video = cv2.VideoWriter("output_video.mp4", fourcc, 30.0, (640,480))
 
-
-cap = cv2.VideoCapture(video_path)
-
-while cap.isOpened():
-    ret, raw_image = cap.read()
-
-    if not ret:
-        break
-
-    raw_image = cv2.resize(raw_image, (640, 480))
-
-    image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
+def save_video_depth_frames(directory, video_path):
+    cap = cv2.VideoCapture(video_path)
     
-    h, w = image.shape[:2]
-    
-    image = transform({'image': image})['image']
-    image = torch.from_numpy(image).unsqueeze(0).to(DEVICE)
-    
-    with torch.no_grad():
-        depth = depth_anything(image)
-    
-    depth = F.interpolate(depth[None], (h, w), mode='bilinear', align_corners=False)[0, 0]
-    depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
-    
-    depth = depth.cpu().numpy().astype(np.uint8)
-    depth_color = cv2.applyColorMap(depth, cv2.COLORMAP_INFERNO)
-    
-    split_region = np.ones((raw_image.shape[0], margin_width, 3), dtype=np.uint8) * 255
-    combined_results = cv2.hconcat([raw_image, split_region, depth_color])
-    
-    caption_space = np.ones((caption_height, combined_results.shape[1], 3), dtype=np.uint8) * 255
-    captions = ['Raw image', 'Depth Anything']
-    segment_width = w + margin_width
-    for i, caption in enumerate(captions):
-        # Calculate text size
-        text_size = cv2.getTextSize(caption, font, font_scale, font_thickness)[0]
+    i = 0
+    while cap.isOpened():
+        ret, raw_image = cap.read()
 
-        # Calculate x-coordinate to center the text
-        text_x = int((segment_width * i) + (w - text_size[0]) / 2)
+        if not ret:
+            break
 
-        # Add text caption
-        cv2.putText(caption_space, caption, (text_x, 40), font, font_scale, (0, 0, 0), font_thickness)
+        raw_image = cv2.resize(raw_image, (640, 480))
+
+        image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
     
-    final_result = cv2.vconcat([caption_space, combined_results])
+        h, w = image.shape[:2]
+    
+        image = transform({'image': image})['image']
+        image = torch.from_numpy(image).unsqueeze(0).to(DEVICE)
+    
+        with torch.no_grad():
+            depth = depth_anything(image)
 
-    # Write the frame to the video file
-    out_video.write(depth_color)
-    cv2.imshow('Depth Anything', final_result)
+        target_location = directory + "_frame" + str(i)
+        np.save(target_location, depth.cpu().numpy())
+        i=i+1
+        """
+        print(depth)    
+        depth = F.interpolate(depth[None], (h, w), mode='bilinear', align_corners=False)[0, 0]
+        depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
+    
+        depth = depth.cpu().numpy().astype(np.uint8)
+        depth_color = cv2.applyColorMap(depth, cv2.COLORMAP_INFERNO)
+    
+        split_region = np.ones((raw_image.shape[0], margin_width, 3), dtype=np.uint8) * 255
+        combined_results = cv2.hconcat([raw_image, split_region, depth_color])
+    
+        caption_space = np.ones((caption_height, combined_results.shape[1], 3), dtype=np.uint8) * 255
+        captions = ['Raw image', 'Depth Anything']
+        segment_width = w + margin_width
+        for i, caption in enumerate(captions):
+            # Calculate text size
+            text_size = cv2.getTextSize(caption, font, font_scale, font_thickness)[0]
 
-    # Press q on keyboard to exit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+            # Calculate x-coordinate to center the text
+            text_x = int((segment_width * i) + (w - text_size[0]) / 2)
 
+            # Add text caption
+            cv2.putText(caption_space, caption, (text_x, 40), font, font_scale, (0, 0, 0), font_thickness)
+    
+        final_result = cv2.vconcat([caption_space, combined_results])
+
+        # Write the frame to the video file
+        out_video.write(depth_color)
+        cv2.imshow('Depth Anything', final_result)
+
+        # Press q on keyboard to exit
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        """
 
     
-cap.release()
-out_video.release()
-cv2.destroyAllWindows()
+    cap.release()
+#out_video.release()
+#cv2.destroyAllWindows()
+#COPYPASTED MOSTLY FROM FRAME EXTRACTOR
+"""
+The below iterator is made to extract from the HMDB51 dataset's directory structre. 
+The frame extraction function however works for whatever, it just spits out its output images
+into whatever is set as the current directory for the program, and you can feed an absolute path
+into the function as input. 
+"""
+
+inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted" #The absolute directory where the input video dataset is stored.
+outputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths" #The absolute directory where you want it to spit out the images.
+
+os.chdir(inputDirectory) #First, go to the input directory and get its members
+actions = os.listdir() #got its members (and in HMDB51 also corresponds to main action)
+
+os.chdir(outputDirectory) #now, create corresponding output directories for each action
+for action in actions: 
+    action_path = outputDirectory + "/" + action
+    if(not os.path.exists(action_path)):
+        os.makedirs(action_path) #Create action output directory if it does not exist
+
+
+for action in actions: #now that we have created the nessecary directories, we can extract the images into them
+    os.chdir(inputDirectory + "/" + action)
+    videos = os.listdir() #get a list of the input videos.
+    
+    
+    action_output_directory = (outputDirectory + "/" + action)
+    os.chdir(action_output_directory) #return to output directory for action
+    
+    for video in videos:
+        #try:    
+        frames_directory = (action_output_directory + "/" + video)
+        os.makedirs(frames_directory) #make directory for frames
+        os.chdir(frames_directory) #go to directory
+    
+        video_directory = (inputDirectory+"/"+action+"/"+ video)
+        target_directory = (frames_directory+"/"+video)
+        save_video_depth_frames(target_directory, video_directory) #Extract frames from video into present directory
+
+        #except:
+            #print("An error occured while splitting " + video)    
+        
+    print(action + " done...")
+
+print("depth extraction complete!")
+
+
+#COPYPASTE CODE END
