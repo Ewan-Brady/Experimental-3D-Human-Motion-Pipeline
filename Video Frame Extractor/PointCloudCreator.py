@@ -47,7 +47,6 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
     width_middle = width/2
     height_middle = height/2
     POVDepth = math.tan(angle_horizontal)*width_middle
-    print(POVDepth)
     ratio1 = 0
     ratio2 = 0
     for point in array:
@@ -64,7 +63,7 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
 
         point[0] = direction_vector[0]
         point[1] = direction_vector[1]
-        point[2] = direction_vector[2]
+        #point[2] = direction_vector[2]
 
     return array
 
