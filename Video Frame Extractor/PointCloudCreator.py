@@ -4,7 +4,7 @@ import numpy as np
 import math
 
 depth_multiplier = 2 #Can be any number, set it to two as I think it makes pointclouds look better/more accurate
-FOV = 26.5 * math.pi/180
+FOV = 53 * math.pi/180
 
 def convert_to_pointcloud(image, depth):
     
@@ -46,7 +46,8 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
     #Note that they do not start at a 0 degree angle, and we do not want them to rotate extra.
     width_middle = width/2
     height_middle = height/2
-    POVDepth = math.tan(angle_horizontal)*width_middle
+    POVDepth = width_middle/math.tan(angle_horizontal)#*width_middle
+    print(POVDepth)
     ratio1 = 0
     ratio2 = 0
     for point in array:
@@ -54,16 +55,12 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
         direction_vector = np.array([point[0],point[1],0])-np.array([height_middle,width_middle,POVDepth])
         direction_vector = direction_vector/np.sqrt(np.sum(np.square(direction_vector)))
         #print(point[0])
-        if((point[1]-width_middle)>0):
-            ratio1 = ratio1+1
-        else:
-            ratio2 = ratio2+1
 
         direction_vector = direction_vector*magnitude#(point[2]+POVDepth)#magnitude #Now this should be the new point
 
         point[0] = direction_vector[0]
         point[1] = direction_vector[1]
-        #point[2] = direction_vector[2]
+        point[2] = direction_vector[2]
 
     return array
 
@@ -115,6 +112,12 @@ pointcloud = convert_to_pointcloud("/mnt/e/ML-Training-Data/HMDB51/Dataset/Datas
 with open("test.txt", 'w') as output_file:
     output_file.write(numpy_to_text(pointcloud))
     
+
+pointcloud2 = convert_to_pointcloud("/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi_frame0.jpg",
+                            "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi_frame0.npy")
+#print(numpy_to_text(pointcloud))
+with open("test2.txt", 'w') as output_file:
+    output_file.write(numpy_to_text(pointcloud2))
 #print(numpy_to_text(np.zeros((20, 3))))
 
 
