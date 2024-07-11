@@ -2,9 +2,23 @@ from os import replace
 import cv2
 import numpy as np
 import math
+import os
 
 depth_multiplier = 2 #Can be any number, set it to two as I think it makes pointclouds look better/more accurate
 FOV = 53 * math.pi/180
+frame_dividor = 3
+#depth_threshhold_fraction = 2/3
+
+def convert_directory(image_directory, depth_directory, video_name):
+    to_return = []
+    num_frames = len(os.listdir(image_directory))
+    for i in range(num_frames):
+        image_frame = (image_directory+"/"+video_name+"_frame" + str(i) + ".jpg")
+        depth_frame = (depth_directory+"/"+video_name+"_frame" + str(i) + ".npy")
+        frame = convert_to_pointcloud(image_frame,depth_frame)
+        to_return.append(frame)
+    to_return = np.stack(to_return)
+    return to_return
 
 def convert_to_pointcloud(image, depth):
     
@@ -21,6 +35,9 @@ def convert_to_pointcloud(image, depth):
     depth = cv2.resize(depth, (240, 320))
     depth = np.expand_dims(depth, axis = 2)
     depth = np.max(depth)-depth
+    
+    #depth_threshhold = np.max(depth)*depth_threshhold_fraction
+    
     depth = depth * depth_multiplier
     #print(depth.shape)
 
@@ -34,8 +51,10 @@ def convert_to_pointcloud(image, depth):
     cloud = []
     for i in range(len(cloud_preprocessed)):
         for j in range(len(cloud_preprocessed[i])):
-            xy_point = np.array([i, j])
-            cloud.append(np.concatenate([xy_point, cloud_preprocessed[i][j]]))
+            if(i%frame_dividor==0 and j%frame_dividor==0):
+                #if(cloud_preprocessed[i][j][0] < depth_threshhold):
+                xy_point = np.array([i, j])
+                cloud.append(np.concatenate([xy_point, cloud_preprocessed[i][j]]))
     cloud = np.stack(cloud)
     
     cloud = cloud_FOV_spread(cloud, FOV, FOV, 320, 240)
@@ -47,7 +66,6 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
     width_middle = width/2
     height_middle = height/2
     POVDepth = width_middle/math.tan(angle_horizontal)#*width_middle
-    print(POVDepth)
     ratio1 = 0
     ratio2 = 0
     for point in array:
@@ -60,22 +78,16 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
 
         point[0] = direction_vector[0]
         point[1] = direction_vector[1]
-        point[2] = direction_vector[2]
+        #point[2] = direction_vector[2]
 
     return array
 
-def rotate(origin, point, angle):
-    """
-    Rotate a point counterclockwise by a given angle around a given origin.
-
-    The angle should be given in radians.
-    """
-    ox, oy = origin
-    px, py = point
-
-    qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
-    qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
-    return qx, qy
+def numpy_vid_to_text(array):
+    to_return = ""
+    for i in array:
+        frame_string = numpy_to_text(i)
+        to_return = to_return+frame_string + "\n/\n"
+    return to_return
 
 def numpy_to_text(array):
     toreturn = ""
@@ -120,4 +132,9 @@ with open("test2.txt", 'w') as output_file:
     output_file.write(numpy_to_text(pointcloud2))
 #print(numpy_to_text(np.zeros((20, 3))))
 
-
+pointcloud3 = convert_directory("/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi",
+                                "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi",
+                                "50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi")
+                            
+with open("test3.txt", 'w') as output_file:
+    output_file.write(numpy_vid_to_text(pointcloud3))
