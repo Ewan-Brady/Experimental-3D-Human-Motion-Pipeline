@@ -109,8 +109,19 @@ def numpy_to_text(array):
         points.append(replacement)
     toreturn = "\n".join(points)
     return toreturn
-
 """
+Demonstration code:
+image_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
+depth_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
+video = "50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
+
+array = convert_directory(image_directory, depth_directory,video)
+stringmade = numpy_vid_to_text(array)
+
+with open("test.txt", "w") as text_file:
+    text_file.write(stringmade)
+
+
 Copied the below codee from Video_Frame_Extractor.py and modified it. 
 
 The below iterator is made to extract from the HMDB51 dataset's directory structre. 
@@ -118,6 +129,7 @@ The frame extraction function however works for whatever, it just spits out its 
 into whatever is set as the current directory for the program, and you can feed an absolute path
 into the function as input. 
 """
+
 
 inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" #The absolute directory where the input video dataset is stored.
 depthDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths"
