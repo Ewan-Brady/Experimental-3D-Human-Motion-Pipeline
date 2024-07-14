@@ -1,3 +1,4 @@
+#Conda environment VideoFrameExtractor
 from os import replace
 import cv2
 import numpy as np
@@ -108,33 +109,47 @@ def numpy_to_text(array):
         points.append(replacement)
     toreturn = "\n".join(points)
     return toreturn
-#test = cv2.imread("/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi_frame0.jpg")
-#print(test.shape)
 
-#test2 = np.load("/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi_frame0.npy")
-#print(test2.shape)
-#test2 = np.transpose(test2, (1, 2, 0))
-#print(test2.shape)
-#test2 = np.resize(test2, (240, 320, 1))
-#print(test2.shape)
+"""
+Copied the below codee from Video_Frame_Extractor.py and modified it. 
 
-pointcloud = convert_to_pointcloud("/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi_frame0.jpg",
-                            "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi_frame0.npy")
-#print(numpy_to_text(pointcloud))
-with open("test.txt", 'w') as output_file:
-    output_file.write(numpy_to_text(pointcloud))
+The below iterator is made to extract from the HMDB51 dataset's directory structre. 
+The frame extraction function however works for whatever, it just spits out its output images
+into whatever is set as the current directory for the program, and you can feed an absolute path
+into the function as input. 
+"""
+
+inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" #The absolute directory where the input video dataset is stored.
+depthDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths"
+outputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Point Clouds" #The absolute directory where you want it to spit out the images.
+
+os.chdir(inputDirectory) #First, go to the input directory and get its members
+actions = os.listdir() #got its members (and in HMDB51 also corresponds to main action)
+
+
+os.chdir(outputDirectory) #now, create corresponding output directories for each action
+for action in actions: 
+    action_path = outputDirectory + "/" + action
+    if(not os.path.exists(action_path)):
+        os.makedirs(action_path) #Create action output directory if it does not exist
+
+
+for action in actions: #now that we have created the nessecary directories, we can extract the images into them
+    os.chdir(inputDirectory + "/" + action)
+    videos = os.listdir() #get a list of the input videos.
     
+    
+    action_output_directory = (outputDirectory + "/" + action)
+    os.chdir(action_output_directory) #return to output directory for action
 
-pointcloud2 = convert_to_pointcloud("/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi_frame0.jpg",
-                            "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi/BLACK_HAWK_DOWN_run_f_nm_np1_ri_med_17.avi_frame0.npy")
-#print(numpy_to_text(pointcloud))
-with open("test2.txt", 'w') as output_file:
-    output_file.write(numpy_to_text(pointcloud2))
-#print(numpy_to_text(np.zeros((20, 3))))
+    for video in videos:
+        depth_location = depthDirectory +"/" + action + "/" + video
+        image_location = inputDirectory +"/" + action + "/" + video
+        output = convert_directory(image_location,depth_location,video)    
+        target_location = action_output_directory + "/" + video + "_pointcloud"
 
-pointcloud3 = convert_directory("/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi",
-                                "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi",
-                                "50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi")
-                            
-with open("test3.txt", 'w') as output_file:
-    output_file.write(numpy_vid_to_text(pointcloud3))
+        np.save(target_location,output)
+        
+    print(action + " done...")
+
+print("image extraction complete!")
