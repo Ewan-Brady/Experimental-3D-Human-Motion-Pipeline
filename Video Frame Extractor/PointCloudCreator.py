@@ -151,7 +151,7 @@ def pose_addition(skeleton_file, depth_directory, point_cloud video_name):
 """
 Given 3d keypoints, return robot limb orientations
 
-Keypoints are as folllows
+Keypoints are as follows
 First point is somewhere like the nose/mouth
 Second point is the "left eye" (on right side of face if facing viewer in image)
 Third point is the "right eye"
@@ -169,6 +169,41 @@ Fourtheenth point: "left hip"
 Fiftheetnh point: "right hip"
 Sixteenth point: "left foot"
 Seventeetnh point: "right foot"
+
+
+Output is as follows:
+Torso-Head connection
+    -torso_x
+    -torso_y
+    -torso_z
+Abdomen-torso connection
+    -abdomen_z
+    -abdomen_y
+    -abdomen_x
+Right_Hip-Right_Thigh connection
+    -right_hip_x
+    -right_hip_z
+    -right_hip_y
+Right_Thigh-Right_Calf connection
+    -right_knee
+Left_Hip-Left_Thigh connection
+    -left_hip_x
+    -left_hip_z
+    -left_hip_y
+Left_Thigh-Left_Calf connection
+    -left_knee
+Torso-Right_Bicep connection
+    -right_shoulder1 (up/down, doing chicken)
+    -right_shoulder2 (forward/back, swinging arms)
+Right_Bicep-Right_Forearm connection
+    -right_elbow
+Torso-Left_Bicep connection
+    -left_shoulder1 (up/down, doing chicken)
+    -left_shoulder2 (forward/back, swinging arms)
+Left_Bicep-Left_Forearm connection
+    -left_elbow
+    
+Can see mujoco model to see oreintations in action.
 """
 def calculate_body_angles(body_points):
     print("In progress")
