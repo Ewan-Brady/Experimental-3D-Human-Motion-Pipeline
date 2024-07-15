@@ -109,8 +109,73 @@ def numpy_to_text(array):
         points.append(replacement)
     toreturn = "\n".join(points)
     return toreturn
+
+
+def pose_addition(skeleton_file, depth_directory, point_cloud video_name):
+    skeleton_frames = np.load(skeleton_file)
+    num_frames = skeleton_frames.shape[0]
+    
+    #NOTE: For now code assuming there is only 1 individual in the image, but what happens if there is multiple?
+    processed_skeleton_frames = []
+    for i in range(num_frames): #iterate over each frame
+        #First construct a mini-pointcloud for just the pose points of the frame. 
+
+        #Copypasted from pointcloud functions, use this to get depth for frame
+        depth_frame = (depth_directory+"/"+video_name+"_frame" + str(i) + ".npy")
+
+        depth_frame = np.load(depth_frame)
+        depth_frame = np.transpose(depth_frame, (1, 2, 0))
+        depth_frame = cv2.resize(depth_frame, (240, 320))
+        depth_frame = np.expand_dims(depth_frame, axis = 2)
+        depth_frame = np.max(depth_frame)-depth_frame
+
+        depth_frame = depth_frame * depth_multiplier
+
+        limb_points = []
+        for j in skeleton_frames[i]:
+            xloc = round(j[0])
+            yloc = round(j[1])
+            depth = depth_frame[xloc][yloc] #get the depth at that point
+            limb_points.append(np.array([xloc,yloc,depth]))
+        limb_points = np.stack(limb_points) #Stack limb points into a mini pointcloud.
+        limb_points = cloud_FOV_spread(limb_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
+        
+        limb_angles = calculate_body_angles(limb_points)
+        
+        processed_skeleton_frames = np.concatenate(limb_points,limb_angles)
+
+        #Here we need to calculate all of the angles on the body from 
+        
+    return processed_skeleton_frames, point_cloud
+
+"""
+Given 3d keypoints, return robot limb orientations
+
+Keypoints are as folllows
+First point is somewhere like the nose/mouth
+Second point is the "left eye" (on right side of face if facing viewer in image)
+Third point is the "right eye"
+Fourth point is the "left ear"
+Fifth point is the "right ear"
+Sixth point "left shoulder"
+Seventh point "right shoulder"
+Eighth point "left elbow"
+Ninth point: "right elbow"
+Tenth point: "left hand:"
+Eleventh point: "right hand:" 
+Twelth point: "left hip"
+Thirteenth point: "right hip"
+Fourtheenth point: "left hip"
+Fiftheetnh point: "right hip"
+Sixteenth point: "left foot"
+Seventeetnh point: "right foot"
+"""
+def calculate_body_angles(body_points):
+    print("In progress")
+
 """
 Demonstration code:
+
 image_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
 depth_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
 video = "50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
@@ -128,8 +193,6 @@ The below iterator is made to extract from the HMDB51 dataset's directory struct
 The frame extraction function however works for whatever, it just spits out its output images
 into whatever is set as the current directory for the program, and you can feed an absolute path
 into the function as input. 
-"""
-
 
 inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" #The absolute directory where the input video dataset is stored.
 depthDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths"
@@ -165,3 +228,4 @@ for action in actions: #now that we have created the nessecary directories, we c
     print(action + " done...")
 
 print("image extraction complete!")
+"""
