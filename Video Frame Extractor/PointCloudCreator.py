@@ -204,6 +204,16 @@ Left_Bicep-Left_Forearm connection
     -left_elbow
     
 Can see mujoco model to see oreintations in action.
+MAKE SURE TO CHECK THAT "LEFT" vs "RIGHT" is consistent.
+
+My current idea is we can do the following to get the orientations from the points.:
+Can use ears, eyes, and the mouth/nose to approximate the orientation and location of the head.
+Can use discrepancy between line from shoulder-to-shoulder and line from hip-to-hip to approximate torso-abdomen orientation.
+Can use discrepancy between shoulder-to-shoulder midpoint and estimated head location to get head-torso orientation.
+Can use elbow point, shoulder-shoulder line, and position of head (to indicate "up") to get Bicep-Torso orientation.
+Can use the elbow point, shoulder point, and hand point to get elbow orientation.
+Can use hip-to-hip line, knee position, and head position (to indicate "up") to get Hip-Thigh orientation.
+Can use hip point, knee point, and foot point to get the knee orientation.
 """
 def calculate_body_angles(body_points):
     print("In progress")
