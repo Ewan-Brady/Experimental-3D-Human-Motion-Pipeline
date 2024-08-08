@@ -40,6 +40,11 @@ def extract_2d_frames(model, frames_folder_2d):
     keypoint_frames = []
             
     frames_visibility = []
+    non_visible_count = 0
+    
+    faulty_frames = set()
+    i = 0
+    strikes2 = 0
     for img in images:
         # inference a single image
         batch_results = inference_topdown(model, img)
@@ -48,19 +53,29 @@ def extract_2d_frames(model, frames_folder_2d):
         strikes = 0
         
         frame_visible = True
-        for i in range(5): #Check first 5 keypoints are in bounds.
-            if(results.keypoints_visible[0][i] < confidence_threshhold): #Check for likely not visible head points.
+        for i2 in range(5): #Check first 5 keypoints are in bounds.
+            if(results.keypoints_visible[0][i2] < confidence_threshhold): #Check for likely not visible head points.
                 strikes = strikes+1
-                if(strikes > 2):
+                if(strikes > 4):
                     frame_visible = False
-            
-        frames_visibility.append(frame_visible)
-        
-        if(frame_visible):
-            keypoint_frames.append(results.keypoints[0]) #Add frame of data
+        if(frame_visible == False):
+            strikes2 = strikes2+1
         else:
-            keypoint_frames.append(np.full(results.keypoints[0].shape,-1)) #All negative ones to indicate out-of-frame.
+            strikes2 = 0
+            
+        #frames_visibility.append(frame_visible)
+        keypoint_frames.append(results.keypoints[0]) #Add frame of data
         
+        if(strikes2 > 4): #This system is in place to avoid one-off below confidence frames screwing things up.
+            faulty_frames.add(i-4)
+            faulty_frames.add(i-3)
+            faulty_frames.add(i-2)
+            faulty_frames.add(i-1)
+            faulty_frames.add(i)
+        i = i + 1
+     
+    for i3 in faulty_frames: #Replaces faulty frames with -1 to indicate faulty. 
+        keypoint_frames[i3] = np.full(keypoint_frames[i3].shape,-1)
     """
     This code discards videos where the character is not meaningfully in frame.
     However deciding against using this code, that filtering can be done at the final stage where
@@ -119,8 +134,8 @@ def extract_3d_frames(inferencer, img_path):
         keypoint_frames.append(np.array(result["predictions"][0][0]["keypoints"])) #Add frame of data
         i = i + 1
 
-    for i in faulty_frames: #Replaces faulty frames with -1 to indicate faulty. 
-        keypoint_frames[i] = np.full(keypoint_frames[i].shape,-1)
+    for i2 in faulty_frames: #Replaces faulty frames with -1 to indicate faulty. 
+        keypoint_frames[i2] = np.full(keypoint_frames[i2].shape,-1)
         
     keypoint_frames = np.concatenate(keypoint_frames)
     os.chdir(to_return_to) #return to main directory.

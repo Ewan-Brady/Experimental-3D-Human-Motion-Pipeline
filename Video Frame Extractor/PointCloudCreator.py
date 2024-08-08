@@ -110,9 +110,113 @@ def numpy_to_text(array):
     toreturn = "\n".join(points)
     return toreturn
 
+"""
+Given the 2D pixelspace skeleton file, the 3D nonpixelspace skeleton file, the pointcloud data,
+and the directory where the depth data is stored, split the data into usable training segments and process it
+for training (the processing is done by pose_extract_3d, but you need to split the data first.)
+"""
+minimum_video_frames = 20 #discard all data clips that are below this frame length. 
+def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clouds):
+    """
+    load skseleton data from file
+    """"
+    skeleton_frames_2d = np.load(skeleton_file_2d)
+    skeleton_frames_3d = np.load(skeleton_file_3d)
+    
+    """
+    mismatch check
+    """
+    if not (len(skeleton_frames_2d) == len(skeleton_file_3d) == len(point_cloud)):
+        raise Exception("Mismatch between total frame amounts: " + str(len(skeleton_frames_2d)) + 
+                        ", " + str(len(skeleton_frames_3d)) + 
+                        ", " + str(len(point_clouds)))
 
-def pose_addition(skeleton_file, depth_directory, point_cloud video_name):
-    skeleton_frames = np.load(skeleton_file)
+
+    num_frames = len(skeleton_frames_2d)
+    """
+    Iterate over the frames to check which are faulty, and get the depths for each frame
+    """
+    depth_frames = []
+    faulty_frames = []
+    for i in range(num_frames):
+        #Check for all negative one to indicate flawed frame.
+        if(np.array_equal(skeleton_frames_2d[i],np.full(skeleton_frames_2d[i].shape,-1)) or 
+           np.array_equal(skeleton_frames_3d[i],np.full(skeleton_frames_3d[i].shape,-1))):
+            faulty_frames.append(i)
+            
+        #Copypasted from pointcloud functions, use this to get depth for frame
+        depth_frame = (depth_directory+ "_frame" + str(i) + ".npy")
+
+        depth_frame = np.load(depth_frame)
+        depth_frame = np.transpose(depth_frame, (1, 2, 0))
+        depth_frame = cv2.resize(depth_frame, (240, 320))
+        depth_frame = np.expand_dims(depth_frame, axis = 2)
+        depth_frame = np.max(depth_frame)-depth_frame
+        depth_frame = depth_frame * depth_multiplier
+
+        depth_frames.append(depth_frame)
+    
+    depth_frames = np.stack(depth_frames)
+    
+    """
+    mismatch check
+    """
+    if(len(depth_frames) != num_frames):
+        raise Exception("Mistmatch between depth frames " + str(len(depth_frames)) + 
+                        " and total frames " + str(len(num_frames)))
+    
+    """
+    Process data for each frame and concatenate into clips,
+    clips are separated by the faulty frames
+    """
+    previous_frame_faulty = True #Having this as true makes it so that it makes a new first clip. 
+    data = []
+    for i2 in range(num_frames):
+        if(i2 in faulty_frames):
+            previous_frame_faulty = True #Frame is faulty dont process
+        else:
+            pose_points_3d, pose_angles_3d, point_cloud = pose_extract_3d(skeleton_frames_2d[i], skeleton_frames_3d[i],
+                                                                      depth_frames[i], point_clouds[i]) #Process frame
+           
+            if(previous_frame_faulty): #Make a new clip with gathered frame data, previous frames were marked faulty.
+                data.append([np.array([pose_points_3d]),
+                             np.array([pose_angles_3d]),
+                             np.array([point_cloud])])
+            else:
+                index = (len(data)-1) #Append gathered frame data to pre-existing clip.
+                data[index][0] = np.concatenate(data[index][0], pose_points_3d, axis=0)
+                data[index][1] = np.concatenate(data[index][1], pose_angles_3d, axis=0)
+                data[index][2] = np.concatenate(data[index][2], point_cloud, axis=0)
+             
+    marked_for_removal = []
+    for i3 in range(len(data)): #search for too short clips and check for mismatches
+        current_clip = data[i3]
+        if not (len(current_clip[0]) == len(current_clip[1]) == len(current_clip[2])):
+            raise Exception("Mismatch in clip frame amounts between " + str(len(current_clip[0])) + ", "
+                            + str(len(current_clip[1])) + ", " + str(len(current_clip[2])))
+        
+        if len(current_clip[0] < minimum_video_frames):
+            marked_for_removal.append(i3)
+    
+    marked_for_removal.reverse() #remove the too short clips.
+    for i4 in marked_for_removal:
+        data.pop(i4)
+
+    return data #data is in a nx3 matrix. The first dimension is the various clips, and the second dimension contains
+    #the 3d point frames, 3d angle frames, and point cloud frames.
+
+"""
+From the non-pixelspace 3D pose data, the 2D pixel-space pose data, and the depth data,
+construct 3D pixelspace pose data for a frame 
+
+From the 3D pose data, construct angle data for a frame
+(should probally put this in a separate function which feeds into this one). 
+
+Returns the pointcloud shifted relative to the head position a frame 
+     -Ensure the 3D pixelspace pose data is also shifted relative to the head. 
+     -Figure out how to determine head orientation? 
+"""
+def pose_extract_3d(skeleton_data_2d_frame, skeleton_data_3d_frame, depth_frame, point_cloud_frame):
     num_frames = skeleton_frames.shape[0]
     
     #NOTE: For now code assuming there is only 1 individual in the image, but what happens if there is multiple?
@@ -135,8 +239,12 @@ def pose_addition(skeleton_file, depth_directory, point_cloud video_name):
         for j in skeleton_frames[i]:
             xloc = round(j[0])
             yloc = round(j[1])
-            depth = depth_frame[xloc][yloc] #get the depth at that point
-            limb_points.append(np.array([xloc,yloc,depth]))
+            try:
+                depth = depth_frame[xloc][yloc] #get the depth at that point
+                limb_points.append(np.array([xloc,yloc,depth]))
+            except:
+                print("The 2d pose point was out of frame!")
+                limb_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame and there
         limb_points = np.stack(limb_points) #Stack limb points into a mini pointcloud.
         limb_points = cloud_FOV_spread(limb_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
         
@@ -146,32 +254,17 @@ def pose_addition(skeleton_file, depth_directory, point_cloud video_name):
 
         #Here we need to calculate all of the angles on the body from 
         
-    return processed_skeleton_frames, point_cloud
+    return processed_skeleton_frames, skeleton_angles_3d, point_cloud
 
 """
-Given 3d keypoints, return robot limb orientations
-
-Keypoints are as follows
-First point is somewhere like the nose/mouth
-Second point is the "left eye" (on right side of face if facing viewer in image)
-Third point is the "right eye"
-Fourth point is the "left ear"
-Fifth point is the "right ear"
-Sixth point "left shoulder"
-Seventh point "right shoulder"
-Eighth point "left elbow"
-Ninth point: "right elbow"
-Tenth point: "left hand:"
-Eleventh point: "right hand:" 
-Twelth point: "left hip"
-Thirteenth point: "right hip"
-Fourtheenth point: "left hip"
-Fiftheetnh point: "right hip"
-Sixteenth point: "left foot"
-Seventeetnh point: "right foot"
-
-
-Output is as follows:
+From nonpixelspace 3d data, pixelspace 2d data, and depth data, get the
+pixelspace 3d data (including the actual location of the head) for a frame. 
+"""
+def from_2d_get_3d(pose_data_3d, pose_data_2d, depth_data):
+    print("In progress.")
+    
+"""
+From 3d keypoint data, get 3d angles for a frame as follows:
 Torso-Head connection
     -torso_x
     -torso_y
@@ -202,40 +295,40 @@ Torso-Left_Bicep connection
     -left_shoulder2 (forward/back, swinging arms)
 Left_Bicep-Left_Forearm connection
     -left_elbow
-    
-Can see mujoco model to see oreintations in action.
-MAKE SURE TO CHECK THAT "LEFT" vs "RIGHT" is consistent.
-Note that obscured body parts will have incorrect depth locations.
-My current idea is we can do the following to get the orientations from the points.:
-Can use ears, eyes, and the mouth/nose to approximate the orientation and location of the head.
-Can use discrepancy between line from shoulder-to-shoulder and line from hip-to-hip to approximate torso-abdomen orientation.
-Can use discrepancy between shoulder-to-shoulder midpoint and estimated head location to get head-torso orientation.
-^^^This one is flawed, make an actual version.
-Can use each shoulder point to account for head tilt, but what about bowed head?
-Can use elbow point, shoulder-shoulder line, and position of head (to indicate "up") to get Bicep-Torso orientation.
-Can use the elbow point, shoulder point, and hand point to get elbow orientation.
-Can use hip-to-hip line, knee position, and head position (to indicate "up") to get Hip-Thigh orientation.
-Can use hip point, knee point, and foot point to get the knee orientation.
-
-
-
-This is awfully complicated and possibly error prone, is there a model that provides more convienient keypoints/data?
-There seems to be direct 3D pose estimating models out there, these would be less error prone then taking the depth at a given pixel,
-as it prevents errors due to obscured/facing away parts.
-Set up a 3d keypoint model.
 
 """
-def calculate_body_angles(body_points):
+def get_3d_angles(keypoints_3d):
     print("In progress")
-    #First get the orientation of the head
-    left_eye_to_mouth = body_points[0]-body_points[1]
-    right_eye_to_mouth = body_points[0]-body_points[2]
-    
-    head_orentation_vector = -(left_eye_to_mouth+right_eye_to_mouth)#Points up from the head roughly based on the eyes and mouth location
-    
-    #Next, get orientation of torso-abdomen connection 
-    left_to_right_shoulder = body_points[5]-body_points[6] #points from left to right shoulder
-    left_to_right_hip = body_points[11]-body_points[12] #points from left to right hip. 
+
+"""
+Given a pointcloud and 3d pixelspace pose data, shift all points
+(including pose data points) so that the head is at the origin for a frame.
+"""
+def shift_to_head(pose_data_3d, pointcloud):
+    print("In progress")
+    return pose_data_3d, pointcloud
+
+
+"""
+2D Keypoints are as follows
+First point is somewhere like the nose/mouth
+Second point is the "left eye" (on right side of face if facing viewer in image)
+Third point is the "right eye"
+Fourth point is the "left ear"
+Fifth point is the "right ear"
+Sixth point "left shoulder"
+Seventh point "right shoulder"
+Eighth point "left elbow"
+Ninth point: "right elbow"
+Tenth point: "left hand:"
+Eleventh point: "right hand:" 
+Twelth point: "left hip"
+Thirteenth point: "right hip"
+Fourtheenth point: "left hip"
+Fiftheetnh point: "right hip"
+Sixteenth point: "left foot"
+Seventeetnh point: "right foot"
+"""
 
 """
 Demonstration code:
