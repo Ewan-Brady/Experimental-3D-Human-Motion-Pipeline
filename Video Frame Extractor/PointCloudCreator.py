@@ -205,18 +205,37 @@ Left_Bicep-Left_Forearm connection
     
 Can see mujoco model to see oreintations in action.
 MAKE SURE TO CHECK THAT "LEFT" vs "RIGHT" is consistent.
-
+Note that obscured body parts will have incorrect depth locations.
 My current idea is we can do the following to get the orientations from the points.:
 Can use ears, eyes, and the mouth/nose to approximate the orientation and location of the head.
 Can use discrepancy between line from shoulder-to-shoulder and line from hip-to-hip to approximate torso-abdomen orientation.
 Can use discrepancy between shoulder-to-shoulder midpoint and estimated head location to get head-torso orientation.
+^^^This one is flawed, make an actual version.
+Can use each shoulder point to account for head tilt, but what about bowed head?
 Can use elbow point, shoulder-shoulder line, and position of head (to indicate "up") to get Bicep-Torso orientation.
 Can use the elbow point, shoulder point, and hand point to get elbow orientation.
 Can use hip-to-hip line, knee position, and head position (to indicate "up") to get Hip-Thigh orientation.
 Can use hip point, knee point, and foot point to get the knee orientation.
+
+
+
+This is awfully complicated and possibly error prone, is there a model that provides more convienient keypoints/data?
+There seems to be direct 3D pose estimating models out there, these would be less error prone then taking the depth at a given pixel,
+as it prevents errors due to obscured/facing away parts.
+Set up a 3d keypoint model.
+
 """
 def calculate_body_angles(body_points):
     print("In progress")
+    #First get the orientation of the head
+    left_eye_to_mouth = body_points[0]-body_points[1]
+    right_eye_to_mouth = body_points[0]-body_points[2]
+    
+    head_orentation_vector = -(left_eye_to_mouth+right_eye_to_mouth)#Points up from the head roughly based on the eyes and mouth location
+    
+    #Next, get orientation of torso-abdomen connection 
+    left_to_right_shoulder = body_points[5]-body_points[6] #points from left to right shoulder
+    left_to_right_hip = body_points[11]-body_points[12] #points from left to right hip. 
 
 """
 Demonstration code:
