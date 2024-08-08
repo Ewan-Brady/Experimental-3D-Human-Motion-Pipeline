@@ -179,7 +179,7 @@ def main():
             target_location_3D = outputDirectory + "/3D/" + action + "/"  + folder
             target_location_2D = outputDirectory + "/2D/" + action + "/"  + folder
 
-            if(os.path.exists((target_location_3D+".npy")) or os.path.exists((target_location_2D+".npy"))): #Skips finished files to resume.
+            if(os.path.exists((target_location_3D+".npy")) and os.path.exists((target_location_2D+".npy"))): #Skips finished files to resume.
                 skip_occured = True
                 skips = skips + 1
                 continue
