@@ -187,9 +187,12 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 data[index][0] = np.concatenate(data[index][0], pose_points_3d, axis=0)
                 data[index][1] = np.concatenate(data[index][1], pose_angles_3d, axis=0)
                 data[index][2] = np.concatenate(data[index][2], point_cloud, axis=0)
-             
+    
+    """
+    search for too short clips and check for mismatches
+    """
     marked_for_removal = []
-    for i3 in range(len(data)): #search for too short clips and check for mismatches
+    for i3 in range(len(data)):
         current_clip = data[i3]
         if not (len(current_clip[0]) == len(current_clip[1]) == len(current_clip[2])):
             raise Exception("Mismatch in clip frame amounts between " + str(len(current_clip[0])) + ", "
@@ -198,12 +201,20 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         if len(current_clip[0] < minimum_video_frames):
             marked_for_removal.append(i3)
     
-    marked_for_removal.reverse() #remove the too short clips.
+    """
+    remove the too short clips.
+    """
+    marked_for_removal.reverse()
     for i4 in marked_for_removal:
         data.pop(i4)
 
-    return data #data is in a nx3 matrix. The first dimension is the various clips, and the second dimension contains
-    #the 3d point frames, 3d angle frames, and point cloud frames.
+    """
+    Return the data
+
+    data is in a nx3 matrix. The first dimension is the various clips, and the second dimension contains
+    the 3d point frames, 3d angle frames, and point cloud frames for each clip.
+    """
+    return data
 
 """
 From the non-pixelspace 3D pose data, the 2D pixel-space pose data, and the depth data,
@@ -217,54 +228,109 @@ Returns the pointcloud shifted relative to the head position a frame
      -Figure out how to determine head orientation? 
 """
 def pose_extract_3d(skeleton_data_2d_frame, skeleton_data_3d_frame, depth_frame, point_cloud_frame):
-    num_frames = skeleton_frames.shape[0]
     
-    #NOTE: For now code assuming there is only 1 individual in the image, but what happens if there is multiple?
-    processed_skeleton_frames = []
-    for i in range(num_frames): #iterate over each frame
-        #First construct a mini-pointcloud for just the pose points of the frame. 
+    skeleton_points_3d = from_2d_get_3d(skeleton_data_3d_frame, skeleton_data_2d_frame, depth_frame)
+    
+    skeleton_angles_3d = get_3d_angles(skeleton_points_3d)
+    
+    skeleton_points_3d, point_cloud_frame = shift_to_head(skeleton_points_3d, point_cloud_frame)
 
-        #Copypasted from pointcloud functions, use this to get depth for frame
-        depth_frame = (depth_directory+"/"+video_name+"_frame" + str(i) + ".npy")
-
-        depth_frame = np.load(depth_frame)
-        depth_frame = np.transpose(depth_frame, (1, 2, 0))
-        depth_frame = cv2.resize(depth_frame, (240, 320))
-        depth_frame = np.expand_dims(depth_frame, axis = 2)
-        depth_frame = np.max(depth_frame)-depth_frame
-
-        depth_frame = depth_frame * depth_multiplier
-
-        limb_points = []
-        for j in skeleton_frames[i]:
-            xloc = round(j[0])
-            yloc = round(j[1])
-            try:
-                depth = depth_frame[xloc][yloc] #get the depth at that point
-                limb_points.append(np.array([xloc,yloc,depth]))
-            except:
-                print("The 2d pose point was out of frame!")
-                limb_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame and there
-        limb_points = np.stack(limb_points) #Stack limb points into a mini pointcloud.
-        limb_points = cloud_FOV_spread(limb_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
-        
-        limb_angles = calculate_body_angles(limb_points)
-        
-        processed_skeleton_frames = np.concatenate(limb_points,limb_angles)
-
-        #Here we need to calculate all of the angles on the body from 
-        
-    return processed_skeleton_frames, skeleton_angles_3d, point_cloud
+    return skeleton_points_3d, skeleton_angles_3d, point_cloud_frame
 
 """
 From nonpixelspace 3d data, pixelspace 2d data, and depth data, get the
 pixelspace 3d data (including the actual location of the head) for a frame. 
 """
-def from_2d_get_3d(pose_data_3d, pose_data_2d, depth_data):
-    print("In progress.")
+def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
+    """
+    Using depth data and 2d points, make approximated 3D points. 
+    FOV spread is done on the points at the end as well, same as the point cloud. 
+    """
+    extrapolated_2d_points = []
+    for keypoint in pose_frame_2d:
+        xloc = round(keypoint[0])
+        yloc = round(keypoint[1])
+        try:
+            depth = depth_frame[xloc][yloc] #get the depth at that point
+            extrapolated_2d_points.append(np.array([xloc,yloc,depth]))
+        except:
+            print("The 2d pose point was out of frame!")
+            extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
+    extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
+    extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
     
+    """
+    Using points that 2D and 3D keypoints have in common, make an average conversion factor between the
+    space of the 3D points and the pointcloud space.
+    Common points are:
+    Left and right hand
+    Left and right elbow
+    Left and right shoulder
+    Left and right hip
+    Left and right knee
+    Left and right foot
+    Mouth/Nose
+    For a total of 12 points.
+    
+    3D keypoints are in human3.6M format, 2D keypoints are in COCO format (see mmpose docs):
+    """
+    common_points_2d_3d = {5:11,6:14,7:12,8:15,9:13,10:16,11:4,12:1,13:5,14:2,15:6,16:3,0:9} #keys are 2D point index, value is corresponding 3D point index.
+    sum_3d = 0
+    sum_2d = 0
+    uncovered_points = common_points_2d_3d.keys()
+    for i in common_points_2d_3d: #Loop through each point
+        uncovered_points.remove(i) #This point is being covered, remove it from uncovered
+        for i2 in uncovered_points: #Loop through points that have not been covered yet
+            vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
+            vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
+
+            sum3d = sum3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
+            sum2d = sum2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
+
+    conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
+    
+
+    """
+    Use conversion factor to extrapolate pixelspace 3d points from a reference point, the conversion factor,
+    and the nonpixelspace 3d points. 
+    """
+    head_position = extrapolated_2d_points[0] #Using the 2D mouth as the extrapolated head position
+
+    pixelspace_points_3d = []
+    for i in range(len(pose_frame_3d)):
+        if(i==9):
+            pose_frame_3d[i] = head_position #9 is the head position, assign
+        else: #Calculate position via relative position to mouth
+            relative_position = pose_frame_3d[i] - pose_frame_3d[9] #Turn point 9 (mouth) into the origin
+            #Convert to pixelspace and add head_position to restore origin
+            pose_frame_3d[i] = relative_position*conversion_factor + head_position
+         
+    
+    """
+    Add a derived head position as the final element.
+    The approximate head position is found by taking the direction vector from the mouth (9) to in between
+    the eyes (10), then making that vector the same length as the vector to the mouth, before finally adding
+    this vector to the middle shoulder point (8)
+    """
+    direction_vector = pixelspace_points_3d[10]-pixelspace_points_3d[9] #get direction vector
+    magnitude_vector = pixelspace_points_3d[9]-pixelspace_points_3d[8] #Use this to get desired magnitude
+    unit_vector = direction_vector/np.sqrt(np.sum(np.square(direction_vector))) #get unit vector of direction vector
+    head_vector = np.sqrt(np.sum(np.square(direction_vector))) * unit_vector #Use magnitude and unit vector to get final vector
+    head_point = head_vector + pixelspace_points_3d[8] #add final vector to mid shoulder
+    
+    pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
+
+    """
+    Stack found pixelspace 3d points and return.
+    """
+    pixelspace_points_3d = np.stack(pixelspace_points_3d)
+
+    return pixelspace_points_3d
+
+
+
 """
-From 3d keypoint data, get 3d angles for a frame as follows:
+From 3d skeleton pixelspace data, get 3d angles for a frame as follows:
 Torso-Head connection
     -torso_x
     -torso_y
@@ -296,39 +362,56 @@ Torso-Left_Bicep connection
 Left_Bicep-Left_Forearm connection
     -left_elbow
 
+Not going to actually use these angles, doing quaternion of vector change. (I.E change from head-middle shoulder vector to
+middle shoulder-abdomen vector, continuing down a chain like this.)    
 """
 def get_3d_angles(keypoints_3d):
-    print("In progress")
+    
+    """
+    The first list value is the initial point, the second value is the midpoint, 
+    the final value is the final point for junctions.
+    """
+    connected_pairs = [17,8,14], [17,8,11], [17,8,7], [8,7,0], [8,14,15], [8,11,12], [14,15,16], [11,12,13], [1,2,3], [4,5,6]
+
+    quaternion_angles = []
+    for i in connected_pairs:
+        initial = keypoints_3d[connected_pairs[1]] - keypoints_3d[connected_pairs[0]]
+        final = keypoints_3d[connected_pairs[2]] - keypoints_3d[connected_pairs[1]]
+        quaternion_angles.append(quaternion_from_vectors(initial, final))
+    
+    quaternion_angles = np.stack(quaternion_angles)
+
+    return quaternion_angles
+
+
+"""
+Gets the quaternion required to rotate from 1 vector to another. 
+https://stackoverflow.com/questions/1171849/finding-quaternion-representing-the-rotation-from-one-vector-to-another
+"""
+def quaternion_from_vectors(initial, final):
+    initial_unit = initial/np.sqrt(np.sum(np.square(initial)))
+    final_unit = final/np.sqrt(np.sum(np.square(final)))
+    
+    crossproduct = np.cross(initial_unit, final_unit)
+    w = 1 + np.dot(initial_unit, final_unit)
+    
+    quaternion = np.concatenate([crossproduct,w]) #Forms a quaternion xyzw.
+    
+    quaternion = quaternion/np.sqrt(np.sum(np.square(quaternion))) #Make sure it is a unit quaternion.
+
+    return quaternion
 
 """
 Given a pointcloud and 3d pixelspace pose data, shift all points
-(including pose data points) so that the head is at the origin for a frame.
+(including pose data points) so that the head (point 17) is at the origin for a frame.
 """
 def shift_to_head(pose_data_3d, pointcloud):
-    print("In progress")
+    head_position = pose_data_3d[17]
+    
+    pointcloud = pointcloud-head_position #This should subtract each point by head_position, but keep a watch to make sure.
+    pose_data_3d = pose_data_3d-head_position
+
     return pose_data_3d, pointcloud
-
-
-"""
-2D Keypoints are as follows
-First point is somewhere like the nose/mouth
-Second point is the "left eye" (on right side of face if facing viewer in image)
-Third point is the "right eye"
-Fourth point is the "left ear"
-Fifth point is the "right ear"
-Sixth point "left shoulder"
-Seventh point "right shoulder"
-Eighth point "left elbow"
-Ninth point: "right elbow"
-Tenth point: "left hand:"
-Eleventh point: "right hand:" 
-Twelth point: "left hip"
-Thirteenth point: "right hip"
-Fourtheenth point: "left hip"
-Fiftheetnh point: "right hip"
-Sixteenth point: "left foot"
-Seventeetnh point: "right foot"
-"""
 
 """
 Demonstration code:
