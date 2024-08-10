@@ -119,7 +119,7 @@ minimum_video_frames = 20 #discard all data clips that are below this frame leng
 def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clouds):
     """
     load skseleton data from file
-    """"
+    """
     skeleton_frames_2d = np.load(skeleton_file_2d)
     skeleton_frames_3d = np.load(skeleton_file_3d)
     
@@ -415,18 +415,28 @@ def shift_to_head(pose_data_3d, pointcloud):
 
 """
 Demonstration code:
-
+"""
 image_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
 depth_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
 video = "50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
-
+pose_data_2d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/2D/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi.npy"
+pose_data_3d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi.npy"
 array = convert_directory(image_directory, depth_directory,video)
-stringmade = numpy_vid_to_text(array)
 
-with open("test.txt", "w") as text_file:
-    text_file.write(stringmade)
+points_3d,angles_3d,array = pose_extract_3d(pose_data_2d,pose_data_3d,depth_directory,array);
 
 
+pointcloud_stringmade = numpy_vid_to_text(array)
+points_3d_stringmade = numpy_vid_to_text(points_3d)
+angles_3d_stringmade = numpy_vid_to_text(angles_3d)
+
+with open("pointcloud.txt", "w") as text_file:
+    text_file.write(pointcloud_stringmade)
+with open("points.txt", "w") as text_file:
+    text_file.write(points_3d_stringmade)
+with open("angles.txt", "w") as text_file:
+    text_file.write(angles_3d_stringmade)
+"""
 Copied the below codee from Video_Frame_Extractor.py and modified it. 
 
 The below iterator is made to extract from the HMDB51 dataset's directory structre. 
