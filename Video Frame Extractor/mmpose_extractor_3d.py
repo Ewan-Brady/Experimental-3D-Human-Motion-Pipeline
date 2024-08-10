@@ -139,22 +139,7 @@ def extract_3d_frames(inferencer, img_path):
         
     keypoint_frames = np.concatenate(keypoint_frames)
     os.chdir(to_return_to) #return to main directory.
-    """
-    result_generator = inferencer(img_path, show=False)
-    keypoint_frames = []
-    strikes = 0
-    while(True):
-        try:
-            result = next(result_generator) 
-            if (len(result["predictions"][0]) > 1): #Check for a number of people not equal to one.
-                strikes = strikes+1
-                if(strikes > 0):
-                    return None
-            keypoint_frames.append(result["predictions"][0][0]["keypoints"])
-        except:
-            break
-    keypoint_frames = np.concatenate(keypoint_frames)
-    """
+
     return keypoint_frames
 
 
@@ -204,18 +189,8 @@ def main():
                 skip_occured = False
 
             keypoint_frames_3D = extract_3d_frames(inferencer, frame_folder)
-            """
-            if(keypoint_frames_3D is None):
-                print("3D " + folder + " disqualified for two-people")
-                continue
-            """
-            
+
             keypoint_frames_2D = extract_2d_frames(model, frame_folder)
-            """
-            if(keypoint_frames_2D is None):
-                print("2D " + folder + " disqualified for out-of-bounds")
-                continue
-            """
             
             np.save(target_location_2D, keypoint_frames_2D)
             np.save(target_location_3D, keypoint_frames_3D)
@@ -225,18 +200,6 @@ def main():
         #with open(target_location, "w") as imagefile:
         #    imagefile.write(str(keypoint_frames)) #Writes skeletondata frames to file, pretty simple format but can be decoded so it works.
             
-
-
-    """
-    # inference a single image
-    batch_results = inference_topdown(model, img)
-    results = merge_data_samples(batch_results)
-    
-    print(results.pred_instances.keypoints) #THIS LINE HERE WAS ADDED BY ME, it prints the keypoints, though for some reason there is an empty dimensions beforehand in the array.
-    #Each keypoint is stored as a pair, the pair is a 2 member list
-    print(results.pred_instances.keypoints[0]) #This compensates for the extra dimension
-    #I suspect the extra dimension implies it is possible to do batches of images, where each first dimension layer is one of the batch members.
-    """
 
 if __name__ == '__main__':
     main()

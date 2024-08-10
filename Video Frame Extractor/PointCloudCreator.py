@@ -281,11 +281,12 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     for i in common_points_2d_3d: #Loop through each point
         uncovered_points.remove(i) #This point is being covered, remove it from uncovered
         for i2 in uncovered_points: #Loop through points that have not been covered yet
-            vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
-            vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
-
-            sum3d = sum3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
-            sum2d = sum2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
+            if vector_2D[i][2]!=-1 and vector_2D[i2][2]!=-1:
+                vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
+                vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
+            
+                sum3d = sum3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
+                sum2d = sum2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
     
