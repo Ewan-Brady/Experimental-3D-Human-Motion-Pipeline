@@ -367,14 +367,13 @@ Not going to actually use these angles, doing quaternion of vector change. (I.E 
 middle shoulder-abdomen vector, continuing down a chain like this.)    
 """
 def get_3d_angles(keypoints_3d):
-    
+   
     """
     The first list value is the initial point, the second value is the midpoint, 
     the final value is the final point for junctions.
     """
     connected_pairs = [17,8,14], [17,8,11], [17,8,7], [8,7,0], [8,14,15], [8,11,12], [14,15,16], [11,12,13], [1,2,3], [4,5,6]
 
-    quaternion_angles = []
     for i in connected_pairs:
         initial = keypoints_3d[connected_pairs[1]] - keypoints_3d[connected_pairs[0]]
         final = keypoints_3d[connected_pairs[2]] - keypoints_3d[connected_pairs[1]]
