@@ -423,7 +423,7 @@ pose_data_2d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/
 pose_data_3d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi.npy"
 array = convert_directory(image_directory, depth_directory,video)
 
-points_3d,angles_3d,array = pose_extract_3d(pose_data_2d,pose_data_3d,depth_directory,array);
+points_3d,angles_3d,array = process_data(pose_data_2d,pose_data_3d,depth_directory,array);
 
 
 pointcloud_stringmade = numpy_vid_to_text(array)

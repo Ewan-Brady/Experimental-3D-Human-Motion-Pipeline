@@ -96,7 +96,7 @@ def extract_2d_frames(model, frames_folder_2d):
     
     """
         
-    keypoint_frames = np.concatenate(keypoint_frames)
+    keypoint_frames = np.stack(keypoint_frames)
     os.chdir(to_return_to) #return to main directory.
     
     return keypoint_frames
@@ -137,7 +137,7 @@ def extract_3d_frames(inferencer, img_path):
     for i2 in faulty_frames: #Replaces faulty frames with -1 to indicate faulty. 
         keypoint_frames[i2] = np.full(keypoint_frames[i2].shape,-1)
         
-    keypoint_frames = np.concatenate(keypoint_frames)
+    keypoint_frames = np.stack(keypoint_frames)
     os.chdir(to_return_to) #return to main directory.
 
     return keypoint_frames
