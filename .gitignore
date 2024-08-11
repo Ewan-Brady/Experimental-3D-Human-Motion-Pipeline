@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Video Frame Extractor/pointclouds.txt
+/Video Frame Extractor/points.txt
+/Video Frame Extractor/angles.txt
