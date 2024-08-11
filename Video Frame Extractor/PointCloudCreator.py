@@ -116,7 +116,7 @@ and the directory where the depth data is stored, split the data into usable tra
 for training (the processing is done by pose_extract_3d, but you need to split the data first.)
 """
 minimum_video_frames = 20 #discard all data clips that are below this frame length. 
-def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clouds):
+def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clouds, video_name):
     """
     load skseleton data from file
     """
@@ -126,7 +126,8 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     """
     mismatch check
     """
-    if not (len(skeleton_frames_2d) == len(skeleton_file_3d) == len(point_cloud)):
+    if not (len(skeleton_frames_2d) == len(skeleton_frames_3d) == len(point_clouds)):
+        print((len(skeleton_frames_2d) == len(skeleton_frames_3d) == len(point_clouds)))
         raise Exception("Mismatch between total frame amounts: " + str(len(skeleton_frames_2d)) + 
                         ", " + str(len(skeleton_frames_3d)) + 
                         ", " + str(len(point_clouds)))
@@ -145,7 +146,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
             faulty_frames.append(i)
             
         #Copypasted from pointcloud functions, use this to get depth for frame
-        depth_frame = (depth_directory+ "_frame" + str(i) + ".npy")
+        depth_frame = (depth_directory+ "/" + video + "_frame" + str(i) + ".npy")
 
         depth_frame = np.load(depth_frame)
         depth_frame = np.transpose(depth_frame, (1, 2, 0))
@@ -177,17 +178,17 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         else:
             pose_points_3d, pose_angles_3d, point_cloud = pose_extract_3d(skeleton_frames_2d[i], skeleton_frames_3d[i],
                                                                       depth_frames[i], point_clouds[i]) #Process frame
-           
             if(previous_frame_faulty): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
                              np.array([point_cloud])])
+                previous_frame_faulty=False
             else:
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
-                data[index][0] = np.concatenate(data[index][0], pose_points_3d, axis=0)
-                data[index][1] = np.concatenate(data[index][1], pose_angles_3d, axis=0)
-                data[index][2] = np.concatenate(data[index][2], point_cloud, axis=0)
-    
+                data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
+                data[index][1] = np.concatenate([data[index][1], np.array([pose_angles_3d])], axis=0)
+                data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
+
     """
     search for too short clips and check for mismatches
     """
@@ -198,8 +199,9 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
             raise Exception("Mismatch in clip frame amounts between " + str(len(current_clip[0])) + ", "
                             + str(len(current_clip[1])) + ", " + str(len(current_clip[2])))
         
-        if len(current_clip[0] < minimum_video_frames):
+        if (len(current_clip[0]) < minimum_video_frames):
             marked_for_removal.append(i3)
+            #print(len(current_clip[0]))
     
     """
     remove the too short clips.
@@ -251,7 +253,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
         xloc = round(keypoint[0])
         yloc = round(keypoint[1])
         try:
-            depth = depth_frame[xloc][yloc] #get the depth at that point
+            depth = depth_frame[xloc][yloc].item() #get the depth at that point
             extrapolated_2d_points.append(np.array([xloc,yloc,depth]))
         except:
             print("The 2d pose point was out of frame!")
@@ -277,16 +279,16 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     common_points_2d_3d = {5:11,6:14,7:12,8:15,9:13,10:16,11:4,12:1,13:5,14:2,15:6,16:3,0:9} #keys are 2D point index, value is corresponding 3D point index.
     sum_3d = 0
     sum_2d = 0
-    uncovered_points = common_points_2d_3d.keys()
+    uncovered_points = list(common_points_2d_3d.keys())
     for i in common_points_2d_3d: #Loop through each point
         uncovered_points.remove(i) #This point is being covered, remove it from uncovered
         for i2 in uncovered_points: #Loop through points that have not been covered yet
-            if vector_2D[i][2]!=-1 and vector_2D[i2][2]!=-1:
+            if extrapolated_2d_points[i][2]!=-1 and extrapolated_2d_points[i2][2]!=-1:
                 vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
                 vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
             
-                sum3d = sum3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
-                sum2d = sum2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
+                sum_3d = sum_3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
+                sum_2d = sum_2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
     
@@ -300,13 +302,14 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     pixelspace_points_3d = []
     for i in range(len(pose_frame_3d)):
         if(i==9):
-            pose_frame_3d[i] = head_position #9 is the head position, assign
+            pixelspace_points_3d.append(head_position) #9 is the head position, assign
         else: #Calculate position via relative position to mouth
             relative_position = pose_frame_3d[i] - pose_frame_3d[9] #Turn point 9 (mouth) into the origin
             #Convert to pixelspace and add head_position to restore origin
-            pose_frame_3d[i] = relative_position*conversion_factor + head_position
+            absolute_position = relative_position*conversion_factor + head_position
+
+            pixelspace_points_3d.append(absolute_position)
          
-    
     """
     Add a derived head position as the final element.
     The approximate head position is found by taking the direction vector from the mouth (9) to in between
@@ -373,10 +376,10 @@ def get_3d_angles(keypoints_3d):
     the final value is the final point for junctions.
     """
     connected_pairs = [17,8,14], [17,8,11], [17,8,7], [8,7,0], [8,14,15], [8,11,12], [14,15,16], [11,12,13], [1,2,3], [4,5,6]
-
+    quaternion_angles = []
     for i in connected_pairs:
-        initial = keypoints_3d[connected_pairs[1]] - keypoints_3d[connected_pairs[0]]
-        final = keypoints_3d[connected_pairs[2]] - keypoints_3d[connected_pairs[1]]
+        initial = keypoints_3d[i[1]] - keypoints_3d[i[0]]
+        final = keypoints_3d[i[2]] - keypoints_3d[i[1]]
         quaternion_angles.append(quaternion_from_vectors(initial, final))
     
     quaternion_angles = np.stack(quaternion_angles)
@@ -391,14 +394,14 @@ https://stackoverflow.com/questions/1171849/finding-quaternion-representing-the-
 def quaternion_from_vectors(initial, final):
     initial_unit = initial/np.sqrt(np.sum(np.square(initial)))
     final_unit = final/np.sqrt(np.sum(np.square(final)))
-    
+
     crossproduct = np.cross(initial_unit, final_unit)
-    w = 1 + np.dot(initial_unit, final_unit)
-    
+    w = np.array([(1 + np.dot(initial_unit, final_unit))])
+
     quaternion = np.concatenate([crossproduct,w]) #Forms a quaternion xyzw.
     
     quaternion = quaternion/np.sqrt(np.sum(np.square(quaternion))) #Make sure it is a unit quaternion.
-
+    #print(quaternion)
     return quaternion
 
 """
@@ -407,8 +410,9 @@ Given a pointcloud and 3d pixelspace pose data, shift all points
 """
 def shift_to_head(pose_data_3d, pointcloud):
     head_position = pose_data_3d[17]
+    head_position_colour = np.concatenate([head_position,[0,0,0]]) #Add 0s to make it broadcastable to 6 element pointcloud pixels
     
-    pointcloud = pointcloud-head_position #This should subtract each point by head_position, but keep a watch to make sure.
+    pointcloud = pointcloud-head_position_colour #This should subtract each point by head_position, but keep a watch to make sure.
     pose_data_3d = pose_data_3d-head_position
 
     return pose_data_3d, pointcloud
@@ -423,14 +427,14 @@ pose_data_2d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/
 pose_data_3d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi.npy"
 array = convert_directory(image_directory, depth_directory,video)
 
-points_3d,angles_3d,array = process_data(pose_data_2d,pose_data_3d,depth_directory,array);
+data = process_data(pose_data_2d,pose_data_3d,depth_directory,array,video);
 
 
-pointcloud_stringmade = numpy_vid_to_text(array)
-points_3d_stringmade = numpy_vid_to_text(points_3d)
-angles_3d_stringmade = numpy_vid_to_text(angles_3d)
+pointcloud_stringmade = numpy_vid_to_text(data[0][2])
+points_3d_stringmade = numpy_vid_to_text(data[0][0])
+angles_3d_stringmade = numpy_vid_to_text(data[0][1])
 
-with open("pointcloud.txt", "w") as text_file:
+with open("pointclouds.txt", "w") as text_file:
     text_file.write(pointcloud_stringmade)
 with open("points.txt", "w") as text_file:
     text_file.write(points_3d_stringmade)
