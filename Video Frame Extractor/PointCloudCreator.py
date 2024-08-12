@@ -122,7 +122,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     """
     skeleton_frames_2d = np.load(skeleton_file_2d)
     skeleton_frames_3d = np.load(skeleton_file_3d)
-    
+
     """
     mismatch check
     """
@@ -176,8 +176,8 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         if(i2 in faulty_frames):
             previous_frame_faulty = True #Frame is faulty dont process
         else:
-            pose_points_3d, pose_angles_3d, point_cloud = pose_extract_3d(skeleton_frames_2d[i], skeleton_frames_3d[i],
-                                                                      depth_frames[i], point_clouds[i]) #Process frame
+            pose_points_3d, pose_angles_3d, point_cloud = pose_extract_3d(skeleton_frames_2d[i2], skeleton_frames_3d[i2],
+                                                                      depth_frames[i2], point_clouds[i2]) #Process frame
             if(previous_frame_faulty): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
