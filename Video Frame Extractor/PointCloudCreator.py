@@ -254,7 +254,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
         yloc = round(keypoint[1])
         try:
             depth = depth_frame[xloc][yloc].item() #get the depth at that point
-            extrapolated_2d_points.append(np.array([xloc,yloc,depth]))
+            extrapolated_2d_points.append(np.array([xloc,yloc,depth])) 
         except:
             print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
@@ -291,7 +291,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
                 sum_2d = sum_2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
-    
+    print(conversion_factor)
 
     """
     Use conversion factor to extrapolate pixelspace 3d points from a reference point, the conversion factor,
@@ -325,9 +325,15 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
 
     """
-    Stack found pixelspace 3d points and return.
+    Stack found pixelspace 3d points.
     """
     pixelspace_points_3d = np.stack(pixelspace_points_3d)
+    
+    """
+    Apply some transformations to the pixelspace 3d points.
+    """
+    pixelspace_points_3d[:, [2,1]] = pixelspace_points_3d[:, [1,2]]
+    pixelspace_points_3d[:,0] *=-1
 
     return pixelspace_points_3d
 
