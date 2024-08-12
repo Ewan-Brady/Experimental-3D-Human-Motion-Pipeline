@@ -244,6 +244,7 @@ From nonpixelspace 3d data, pixelspace 2d data, and depth data, get the
 pixelspace 3d data (including the actual location of the head) for a frame. 
 """
 def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
+    
     """
     Using depth data and 2d points, make approximated 3D points. 
     FOV spread is done on the points at the end as well, same as the point cloud. 
@@ -307,7 +308,19 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             pixelspace_points_3d.append(head_position) #9 is the head position, assign
         else: #Calculate position via relative position to mouth
             relative_position = pose_frame_3d[i] - pose_frame_3d[9] #Turn point 9 (mouth) into the origin
+            
+            """
+            Here I apply some transformations to the 3D points while the origin is at the mouth.
+            """
+            z = relative_position[1]
+            y = relative_position[2]
+            relative_position[2] = z
+            relative_position[1] = y
+            relative_position[0] = -relative_position[0]
             #Convert to pixelspace and add head_position to restore origin
+            """
+            Put point in realspace.
+            """
             absolute_position = relative_position*conversion_factor + head_position
 
             pixelspace_points_3d.append(absolute_position)
