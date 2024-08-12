@@ -62,6 +62,7 @@ def convert_to_pointcloud(image, depth):
     return cloud
 
 def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
+    return array #TEST
     #At the edge it should be at full angle, while at the middle there should be no rotation.
     #Note that they do not start at a 0 degree angle, and we do not want them to rotate extra.
     width_middle = width/2
@@ -259,6 +260,8 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
+    extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
+    extrapolated_2d_points[:, [2,1]] = extrapolated_2d_points[:, [1,2]] #TEST
     extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
     
     """
@@ -298,7 +301,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     and the nonpixelspace 3d points. 
     """
     head_position = extrapolated_2d_points[0] #Using the 2D mouth as the extrapolated head position
-
+    print(head_position)
     pixelspace_points_3d = []
     for i in range(len(pose_frame_3d)):
         if(i==9):
@@ -319,7 +322,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     direction_vector = pixelspace_points_3d[10]-pixelspace_points_3d[9] #get direction vector
     magnitude_vector = pixelspace_points_3d[9]-pixelspace_points_3d[8] #Use this to get desired magnitude
     unit_vector = direction_vector/np.sqrt(np.sum(np.square(direction_vector))) #get unit vector of direction vector
-    head_vector = np.sqrt(np.sum(np.square(direction_vector))) * unit_vector #Use magnitude and unit vector to get final vector
+    head_vector = np.sqrt(np.sum(np.square(magnitude_vector))) * unit_vector #Use magnitude and unit vector to get final vector
     head_point = head_vector + pixelspace_points_3d[8] #add final vector to mid shoulder
     
     pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
@@ -331,9 +334,11 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     
     """
     Apply some transformations to the pixelspace 3d points.
-    """
+
     pixelspace_points_3d[:, [2,1]] = pixelspace_points_3d[:, [1,2]]
     pixelspace_points_3d[:,0] *=-1
+    pixelspace_points_3d[:,2] *=-1
+    """
 
     return pixelspace_points_3d
 
@@ -418,8 +423,8 @@ def shift_to_head(pose_data_3d, pointcloud):
     head_position = pose_data_3d[17]
     head_position_colour = np.concatenate([head_position,[0,0,0]]) #Add 0s to make it broadcastable to 6 element pointcloud pixels
     
-    pointcloud = pointcloud-head_position_colour #This should subtract each point by head_position, but keep a watch to make sure.
-    pose_data_3d = pose_data_3d-head_position
+    #pointcloud = pointcloud-head_position_colour #This should subtract each point by head_position, but keep a watch to make sure.
+    #pose_data_3d = pose_data_3d-head_position
 
     return pose_data_3d, pointcloud
 
