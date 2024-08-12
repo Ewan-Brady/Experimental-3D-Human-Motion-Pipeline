@@ -62,7 +62,6 @@ def convert_to_pointcloud(image, depth):
     return cloud
 
 def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
-    return array #TEST
     #At the edge it should be at full angle, while at the middle there should be no rotation.
     #Note that they do not start at a 0 degree angle, and we do not want them to rotate extra.
     width_middle = width/2
@@ -260,8 +259,8 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
-    extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
-    extrapolated_2d_points[:, [2,1]] = extrapolated_2d_points[:, [1,2]] #TEST
+    #extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
+    #extrapolated_2d_points[:, [2,1]] = extrapolated_2d_points[:, [1,2]] #TEST
     extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
     
     """
