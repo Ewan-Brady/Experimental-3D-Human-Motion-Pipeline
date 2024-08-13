@@ -62,6 +62,7 @@ def convert_to_pointcloud(image, depth):
     return cloud
 
 def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
+    return array
     #At the edge it should be at full angle, while at the middle there should be no rotation.
     #Note that they do not start at a 0 degree angle, and we do not want them to rotate extra.
     width_middle = width/2
@@ -150,10 +151,13 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
 
         depth_frame = np.load(depth_frame)
         depth_frame = np.transpose(depth_frame, (1, 2, 0))
-        depth_frame = cv2.resize(depth_frame, (240, 320))
+        depth_frame = cv2.resize(depth_frame, (320, 240))
         depth_frame = np.expand_dims(depth_frame, axis = 2)
         depth_frame = np.max(depth_frame)-depth_frame
         depth_frame = depth_frame * depth_multiplier
+
+        depth_frame = np.transpose(depth_frame, (1,0,2))
+        depth_frame = np.flip(depth_frame, axis = 1)
 
         depth_frames.append(depth_frame)
     
@@ -244,7 +248,9 @@ From nonpixelspace 3d data, pixelspace 2d data, and depth data, get the
 pixelspace 3d data (including the actual location of the head) for a frame. 
 """
 def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
-    
+    pose_frame_2d[:, 1] -= 120
+    pose_frame_2d[:, 1] *= -1
+    pose_frame_2d[:, 1] += 120
     """
     Using depth data and 2d points, make approximated 3D points. 
     FOV spread is done on the points at the end as well, same as the point cloud. 
