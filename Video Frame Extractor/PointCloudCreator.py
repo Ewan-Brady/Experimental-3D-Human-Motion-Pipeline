@@ -293,22 +293,35 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
         uncovered_points.remove(i) #This point is being covered, remove it from uncovered
         for i2 in uncovered_points: #Loop through points that have not been covered yet
             if extrapolated_2d_points[i][2]!=-1 and extrapolated_2d_points[i2][2]!=-1:
-                vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
-                vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
+                """
+                This method somewhat reduces but does not completely eliminate the stretching phenomenon.
+                Perhaps a more mathematicaly complex version of this same idea would work better, "predicting" what the
+                depths of the extrapolated points would be based on the 3D point's vector directions and the 2D x/y positions.
+                """
+                a = extrapolated_2d_points[i] #Extrapolated tip
+                b = extrapolated_2d_points[i2] #Extrapolated tail
+                c = pose_frame_3d[common_points_2d_3d[i]] #Pose frame tip
+                d = pose_frame_3d[common_points_2d_3d[i2]] #Pose frame tail
+                
+                vector_2D = np.array([a[0],a[1]]) - np.array([b[0],b[1]]) #Use this to eliminate depth in the converison factor calc.
+                vector_3D = np.array([c[0],c[2]]) - np.array([d[0],d[2]]) #Remember that z and y are swapped on 3d pose data, so compensate here.
+                
+                #vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
+                #vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
             
                 sum_3d = sum_3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
                 sum_2d = sum_2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
                 print(np.sqrt(np.sum(np.square(vector_2D)))/np.sqrt(np.sum(np.square(vector_3D))))
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
-    print("Conversion factor is: " + conversion_factor)
+    print("Conversion factor is: " + str(conversion_factor))
 
     """
     Use conversion factor to extrapolate pixelspace 3d points from a reference point, the conversion factor,
     and the nonpixelspace 3d points. 
     """
     head_position = extrapolated_2d_points[0] #Using the 2D mouth as the extrapolated head position
-    print(head_position)
+    #print(head_position)
     pixelspace_points_3d = []
     for i in range(len(pose_frame_3d)):
         if(i==9):
@@ -358,7 +371,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     pixelspace_points_3d[:,0] *=-1
     pixelspace_points_3d[:,2] *=-1
     """
-    return extrapolated_2d_points
     return pixelspace_points_3d
 
 
