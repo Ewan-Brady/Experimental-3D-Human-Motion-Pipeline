@@ -26,14 +26,14 @@ def convert_to_pointcloud(image, depth):
 
     image = cv2.imread(image, cv2.IMREAD_COLOR)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255.0
-    image = cv2.resize(image, (240, 320))
+    image = cv2.resize(image, (320, 240))
     image = image * 255
     #print(image.shape)
 
 
     depth = np.load(depth)
     depth = np.transpose(depth, (1, 2, 0))
-    depth = cv2.resize(depth, (240, 320))
+    depth = cv2.resize(depth, (320, 240))
     depth = np.expand_dims(depth, axis = 2)
     depth = np.max(depth)-depth
     
