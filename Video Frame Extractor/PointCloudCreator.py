@@ -269,7 +269,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
     #extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
     #extrapolated_2d_points[:, [2,1]] = extrapolated_2d_points[:, [1,2]] #TEST
-    extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
     """
     Using points that 2D and 3D keypoints have in common, make an average conversion factor between the
     space of the 3D points and the pointcloud space.
@@ -284,34 +283,54 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     For a total of 12 points.
     
     3D keypoints are in human3.6M format, 2D keypoints are in COCO format (see mmpose docs):
+    
+    
+    In addition the common point's depth are corrected via the following procedure:
+        -Get vector from just x,y points from the head from 3d pose data
+        -Get vector from x,y,z points from the head from 3d pose data
+        -Get vector from just x,y points from the head from 2d pose data
+        -From this extrapolate vector for x,y,z points from the head from 2d pose data
+        -Add this vector to the head to get a new extrapolated point, use the depth from this point as the new depth.
+    This helps to correct for disprepancies in the conversion rate caused by body keypoints moving into the background.
+    However, this does not help when the head is the point that is in the background, resulting in a pattern where the conversion
+    rate is reasonable for frames except for when the head is in the background where it then becomes incorrect again.
     """
     common_points_2d_3d = {5:11,6:14,7:12,8:15,9:13,10:16,11:4,12:1,13:5,14:2,15:6,16:3,0:9} #keys are 2D point index, value is corresponding 3D point index.
     sum_3d = 0
     sum_2d = 0
     uncovered_points = list(common_points_2d_3d.keys())
+    
+    head_pos_2D = extrapolated_2d_points[0]
+    #Compensate weird 3D transformations. 
+    head_pos_3D = np.array([(-1*pose_frame_3d[9][0]),pose_frame_3d[9][2],pose_frame_3d[9][1]])
+    for point in common_points_2d_3d:
+        if(point != 0):
+            tip_2D = extrapolated_2d_points[point]
+            #Compensate for weird 3D transformations
+            tip_3D = np.array([(-1*pose_frame_3d[common_points_2d_3d[point]][0]),pose_frame_3d[common_points_2d_3d[point]][2],pose_frame_3d[common_points_2d_3d[point]][1]])
+        
+            extrapolated_vector_2D = np.array([tip_2D[0], tip_2D[1]])-np.array([head_pos_2D[0],head_pos_2D[1]])
+            pose_vector_2D = np.array([tip_3D[0], tip_3D[1]])-np.array([head_pos_3D[0],head_pos_3D[1]])
+            pose_vector_3D = tip_3D-head_pos_3D
+        
+            mini_conversionfactor = np.sqrt(np.sum(np.square(extrapolated_vector_2D)))/np.sqrt(np.sum(np.square(pose_vector_2D)))
+            new_extrapolated_position = (pose_vector_3D/np.sqrt(np.sum(np.square(pose_vector_3D))))*mini_conversionfactor + head_pos_2D
+            extrapolated_2d_points[point] = new_extrapolated_position
+    
+    
+    extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
+
     for i in common_points_2d_3d: #Loop through each point
         uncovered_points.remove(i) #This point is being covered, remove it from uncovered
         for i2 in uncovered_points: #Loop through points that have not been covered yet
             if extrapolated_2d_points[i][2]!=-1 and extrapolated_2d_points[i2][2]!=-1:
-                """
-                This method somewhat reduces but does not completely eliminate the stretching phenomenon.
-                Perhaps a more mathematicaly complex version of this same idea would work better, "predicting" what the
-                depths of the extrapolated points would be based on the 3D point's vector directions and the 2D x/y positions.
-                """
-                a = extrapolated_2d_points[i] #Extrapolated tip
-                b = extrapolated_2d_points[i2] #Extrapolated tail
-                c = pose_frame_3d[common_points_2d_3d[i]] #Pose frame tip
-                d = pose_frame_3d[common_points_2d_3d[i2]] #Pose frame tail
-                
-                vector_2D = np.array([a[0],a[1]]) - np.array([b[0],b[1]]) #Use this to eliminate depth in the converison factor calc.
-                vector_3D = np.array([c[0],c[2]]) - np.array([d[0],d[2]]) #Remember that z and y are swapped on 3d pose data, so compensate here.
-                
-                #vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
-                #vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
+                vector_3D = pose_frame_3d[common_points_2d_3d[i]]-pose_frame_3d[common_points_2d_3d[i2]]
+                vector_2D = extrapolated_2d_points[i] - extrapolated_2d_points[i2]
             
                 sum_3d = sum_3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
                 sum_2d = sum_2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
-                print(np.sqrt(np.sum(np.square(vector_2D)))/np.sqrt(np.sum(np.square(vector_3D))))
+                #print(np.sqrt(np.sum(np.square(vector_2D)))/np.sqrt(np.sum(np.square(vector_3D))))
+
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
     print("Conversion factor is: " + str(conversion_factor))
