@@ -62,7 +62,7 @@ def convert_to_pointcloud(image, depth):
     return cloud
 
 def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
-    return array
+    #return array
     #At the edge it should be at full angle, while at the middle there should be no rotation.
     #Note that they do not start at a 0 degree angle, and we do not want them to rotate extra.
     width_middle = width/2
@@ -265,11 +265,11 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
         except:
             print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
+    extrapolated_2d_points.append(np.array([0,0,0]))
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
     #extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
     #extrapolated_2d_points[:, [2,1]] = extrapolated_2d_points[:, [1,2]] #TEST
     extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
-    
     """
     Using points that 2D and 3D keypoints have in common, make an average conversion factor between the
     space of the 3D points and the pointcloud space.
@@ -298,9 +298,10 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             
                 sum_3d = sum_3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
                 sum_2d = sum_2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
+                print(np.sqrt(np.sum(np.square(vector_2D)))/np.sqrt(np.sum(np.square(vector_3D))))
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
-    print(conversion_factor)
+    print("Conversion factor is: " + conversion_factor)
 
     """
     Use conversion factor to extrapolate pixelspace 3d points from a reference point, the conversion factor,
@@ -357,7 +358,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     pixelspace_points_3d[:,0] *=-1
     pixelspace_points_3d[:,2] *=-1
     """
-
+    return extrapolated_2d_points
     return pixelspace_points_3d
 
 
