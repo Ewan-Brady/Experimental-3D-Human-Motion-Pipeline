@@ -436,7 +436,8 @@ def get_3d_angles(keypoints_3d):
     The first list value is the initial point, the second value is the midpoint, 
     the final value is the final point for junctions.
     """
-    connected_pairs = [17,8,14], [17,8,11], [17,8,7], [8,7,0], [8,14,15], [8,11,12], [14,15,16], [11,12,13], [1,2,3], [4,5,6]
+    connected_pairs = [[17,8,14], [17,8,11], [17,8,7], [8,7,0], [8,14,15], [8,11,12], [14,15,16], [11,12,13], [1,2,3], [4,5,6], 
+                       [0,1,2],[0,4,5],[7,0,1],[7,0,4]]
     quaternion_angles = []
     for i in connected_pairs:
         initial = keypoints_3d[i[1]] - keypoints_3d[i[0]]
@@ -473,8 +474,8 @@ def shift_to_head(pose_data_3d, pointcloud):
     head_position = pose_data_3d[17]
     head_position_colour = np.concatenate([head_position,[0,0,0]]) #Add 0s to make it broadcastable to 6 element pointcloud pixels
     
-    #pointcloud = pointcloud-head_position_colour #This should subtract each point by head_position, but keep a watch to make sure.
-    #pose_data_3d = pose_data_3d-head_position
+    pointcloud = pointcloud-head_position_colour #This should subtract each point by head_position, but keep a watch to make sure.
+    pose_data_3d = pose_data_3d-head_position
 
     return pose_data_3d, pointcloud
 
