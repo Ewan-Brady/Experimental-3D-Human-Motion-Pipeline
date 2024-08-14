@@ -196,6 +196,10 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
     
     """
+    Remove too-short clips
+    """
+    data = remove_short_clips(data, minimum_video_frames)
+    """
     process clips for errors.
     
     This process does two things: eliminates/masks small glitches in clips, and splits clips where it thinks
@@ -203,30 +207,15 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     """
     processed_data = []
     for clip in data:
-        clips = process_clip(data)
+        clips = process_clip(clip)
         processed_data = processed_data + clips
-
-    """
-    search for too short clips and check for mismatches
-    """
-    marked_for_removal = []
-    for i3 in range(len(data)):
-        current_clip = data[i3]
-        if not (len(current_clip[0]) == len(current_clip[1]) == len(current_clip[2])):
-            raise Exception("Mismatch in clip frame amounts between " + str(len(current_clip[0])) + ", "
-                            + str(len(current_clip[1])) + ", " + str(len(current_clip[2])))
-        
-        if (len(current_clip[0]) < minimum_video_frames):
-            marked_for_removal.append(i3)
-            #print(len(current_clip[0]))
+    data = processed_data
     
     """
-    remove the too short clips.
+    Remove too-short clips again.
     """
-    marked_for_removal.reverse()
-    for i4 in marked_for_removal:
-        data.pop(i4)
-
+    data = remove_short_clips(data, minimum_video_frames)
+    
     """
     Return the data
 
@@ -243,8 +232,84 @@ The main issues it identifies are:
      -Jumps from the head hanging out in one position to hanging out in another, likely caused by a camera angle change.
      In this case in splits the clip.
 """
+z_score_cutoff = 1.75 #The z-score cutoff to determine which lengths are large enough jumps to be anomalies
 def process_clip(data):
-    print("In progress")
+    head_gaps = [] #This is a list of the distances between frames
+    for i in range((len(data[3])-1)):
+        distance_vector = data[3][i]-data[3][(i+1)]
+        distance = np.sqrt(np.sum(np.square(distance_vector)))
+        head_gaps.append(distance)
+    
+    gap_indicators = []
+    """
+    To find the gap indicators we need to do some statistics to find large deviations from the mean,
+    finding the mean, standard deviation, z score.
+    """
+    #Calculate mean
+    sum_for_mean = 0
+    for i2 in head_gaps:
+        sum_for_mean = sum_for_mean+i
+    mean = sum_for_mean/len(head_gaps)
+    
+    #Calculate standard deviation
+    sum_for_deviation = 0
+    for i3 in head_gaps:
+        sum_for_deviation = sum_for_deviation+((i3-mean)**2)
+    
+    standard_deviation = (sum_for_deviation/(len(head_gaps)-1))**0.5
+    
+    #Calculate z scores and use to find large jumps in data.
+    for i4 in range(len(head_gaps)):
+        z_score = (head_gaps[i4]-mean)/standard_deviation
+        if(z_score > z_score_cutoff): #Large jump identified
+            gap_indicators.append(i4)
+        elif (i4 == 0 or i4 == (len(head_gaps)-1)): #First and final frame should also be marked to identify continious segments. 
+            gap_indicators.append(i4)
+    """
+    Now that we have identified the frames with large gaps we can identify whether it is a brief change in position or
+    a permanent one, and implement the corresponding changes.
+    """
+    #Use the largest continious length as the baseline for which is correct and which is anomaly.
+    contious_segment_lengths = []   
+    for initial_index in range((len(gap_indicators)-1)):
+        initial = gap_indicators[initial_index]
+        final = gap_indicators[initial_index+1]
+        length = final-initial
+        contious_segment_lengths.append(length)
+    print(gap_indicators)
+    print(contious_segment_lengths)
+    
+
+    return []
+
+    
+
+"""
+removes clips in data below minimum allowable length
+"""
+def remove_short_clips(data, minimum_allowable_length):
+    """
+    search for too short clips and check for mismatches
+    """
+    marked_for_removal = []
+    for i3 in range(len(data)):
+        current_clip = data[i3]
+        if not (len(current_clip[0]) == len(current_clip[1]) == len(current_clip[2])):
+            raise Exception("Mismatch in clip frame amounts between " + str(len(current_clip[0])) + ", "
+                            + str(len(current_clip[1])) + ", " + str(len(current_clip[2])))
+        
+        if (len(current_clip[0]) < minimum_allowable_length):
+            marked_for_removal.append(i3)
+            #print(len(current_clip[0]))
+    
+    """
+    remove the too short clips.
+    """
+    marked_for_removal.reverse()
+    for i4 in marked_for_removal:
+        data.pop(i4)
+        
+    return data
 
 
 """
