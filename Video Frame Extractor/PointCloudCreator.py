@@ -265,7 +265,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
         except:
             print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
-    extrapolated_2d_points.append(np.array([0,0,0]))
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
     #extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
     #extrapolated_2d_points[:, [2,1]] = extrapolated_2d_points[:, [1,2]] #TEST
@@ -318,7 +317,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             extrapolated_2d_points[point] = new_extrapolated_position
     
     
-    extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
+    #extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
 
     for i in common_points_2d_3d: #Loop through each point
         uncovered_points.remove(i) #This point is being covered, remove it from uncovered
@@ -379,16 +378,13 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
 
     """
-    Stack found pixelspace 3d points.
+    Stack found pixelspace 3d points and spread.
     """
     pixelspace_points_3d = np.stack(pixelspace_points_3d)
+    pixelspace_points_3d = cloud_FOV_spread(pixelspace_points_3d, FOV, FOV, 320, 240) #Do FOV spread on limb points
     
     """
-    Apply some transformations to the pixelspace 3d points.
-
-    pixelspace_points_3d[:, [2,1]] = pixelspace_points_3d[:, [1,2]]
-    pixelspace_points_3d[:,0] *=-1
-    pixelspace_points_3d[:,2] *=-1
+    Return pixelspace points.
     """
     return pixelspace_points_3d
 
