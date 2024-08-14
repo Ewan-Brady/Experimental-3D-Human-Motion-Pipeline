@@ -180,18 +180,31 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         if(i2 in faulty_frames):
             previous_frame_faulty = True #Frame is faulty dont process
         else:
-            pose_points_3d, pose_angles_3d, point_cloud = pose_extract_3d(skeleton_frames_2d[i2], skeleton_frames_3d[i2],
+            pose_points_3d, pose_angles_3d, point_cloud, head_pos = pose_extract_3d(skeleton_frames_2d[i2], skeleton_frames_3d[i2],
                                                                       depth_frames[i2], point_clouds[i2]) #Process frame
             if(previous_frame_faulty): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
-                             np.array([point_cloud])])
+                             np.array([point_cloud]),
+                             np.array([head_pos])])
                 previous_frame_faulty=False
             else:
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
                 data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
                 data[index][1] = np.concatenate([data[index][1], np.array([pose_angles_3d])], axis=0)
                 data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
+                data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
+    
+    """
+    process clips for errors.
+    
+    This process does two things: eliminates/masks small glitches in clips, and splits clips where it thinks
+    a camera angle jump occured. 
+    """
+    processed_data = []
+    for clip in data:
+        clips = process_clip(data)
+        processed_data = processed_data + clips
 
     """
     search for too short clips and check for mismatches
@@ -223,6 +236,18 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     return data
 
 """
+This function identifies issues based on changes in head position.
+The main issues it identifies are:
+     -Brief "islands" where the head is in a drastically different position, likely caused by being placed in background
+     instead of foreground. In this case it tries to mask the issue.
+     -Jumps from the head hanging out in one position to hanging out in another, likely caused by a camera angle change.
+     In this case in splits the clip.
+"""
+def process_clip(data):
+    print("In progress")
+
+
+"""
 From the non-pixelspace 3D pose data, the 2D pixel-space pose data, and the depth data,
 construct 3D pixelspace pose data for a frame 
 
@@ -232,16 +257,20 @@ From the 3D pose data, construct angle data for a frame
 Returns the pointcloud shifted relative to the head position a frame 
      -Ensure the 3D pixelspace pose data is also shifted relative to the head. 
      -Figure out how to determine head orientation? 
+     
+Returns the position of the head before it is shifted to the origin, I.E. the position relative to the camera.
 """
 def pose_extract_3d(skeleton_data_2d_frame, skeleton_data_3d_frame, depth_frame, point_cloud_frame):
     
     skeleton_points_3d = from_2d_get_3d(skeleton_data_3d_frame, skeleton_data_2d_frame, depth_frame)
     
+    unaltered_head_position = np.copy(skeleton_points_3d[9]) #Use this for later analysis of head positions
+
     skeleton_angles_3d = get_3d_angles(skeleton_points_3d)
     
     skeleton_points_3d, point_cloud_frame = shift_to_head(skeleton_points_3d, point_cloud_frame)
 
-    return skeleton_points_3d, skeleton_angles_3d, point_cloud_frame
+    return skeleton_points_3d, skeleton_angles_3d, point_cloud_frame, unaltered_head_position
 
 """
 From nonpixelspace 3d data, pixelspace 2d data, and depth data, get the
@@ -332,7 +361,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
 
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
-    print("Conversion factor is: " + str(conversion_factor))
+    #print("Conversion factor is: " + str(conversion_factor))
 
     """
     Use conversion factor to extrapolate pixelspace 3d points from a reference point, the conversion factor,
