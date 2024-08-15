@@ -390,18 +390,33 @@ def process_clip(data, fill_in_cutoff):
             data[i] = data[i][end_segment_start:,...]
     to_return.append(data)
     
+    """
+    Can uncomment this to see how it split
+    """ 
     print(contious_segment_lengths)
     for i in to_return:
         print(str(i[0].shape) + " " + str(i[1].shape) + " " + str(i[2].shape) + " " + str(i[3].shape))
-        
+
     return to_return
 
 """
 In a given clip, attempts to extrapolate the start and end frames (exclusive, I.E. the frames in between start and end),
 assuming the frames in between are corrupted in some way and are not to be used so need to be filled-in by estimations. 
+
+In the future we may implement a more advanced system which anaylzes the change in quaternions overtime to then determine 
+the changes in 3D pose point positions overtime, but for now we are just replacing it with the previous and next frame
 """
 def fill_in_frames(clip, start, end):
-    print("TODO, In progress")
+    if(end-start > 3):
+        raise Exception("Fill-ins for lengths of more than 2 is not yet implemented.")
+    if(end-start <= 1):
+        raise Exception("Must be at least one frame to fill in.")
+    
+    for i in range(len(clip)):
+        clip[i][(start+1)] = clip[i][(start)] #Replace first frame with previous frame
+        if(end-start == 3):
+            clip[i][(end-1)] = clip[i][(end)] #Replace second frame with following frame if second frame is to be replaced.
+
     return clip
 
 
