@@ -175,19 +175,31 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     Process data for each frame and concatenate into clips,
     clips are separated by the faulty frames
     """
-    previous_frame_faulty = True #Having this as true makes it so that it makes a new first clip. 
+    previous_frame_faulty = True #Having this as true makes it so that it makes a new first clip.
+    num_previous_faulty_frames = fill_in_cutoff+1 #Must always start greater than fill-in cutoff so it makes new first clip
     data = []
     for i2 in range(num_frames):
         if(i2 in faulty_frames):
             previous_frame_faulty = True #Frame is faulty dont process
+            num_previous_faulty_frames += 1
         else:
             pose_points_3d, pose_angles_3d, point_cloud, head_pos = pose_extract_3d(skeleton_frames_2d[i2], skeleton_frames_3d[i2],
                                                                       depth_frames[i2], point_clouds[i2]) #Process frame
-            if(previous_frame_faulty): #Make a new clip with gathered frame data, previous frames were marked faulty.
+            if(previous_frame_faulty and (num_previous_faulty_frames > fill_in_cutoff)): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
                              np.array([point_cloud]),
                              np.array([head_pos])])
+                num_previous_faulty_frames = 0
+                previous_frame_faulty=False
+            elif(previous_frame_faulty): #A small enough amount of previous frames were marked faulty to do a fill-in
+                index = (len(data)-1) #Append gathered frame data to pre-existing clip.
+                for i in range(num_previous_faulty_frames+1): #Concatenate the number of faulty frames +1, all but last will be replaced with fill-in
+                    data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
+                    data[index][1] = np.concatenate([data[index][1], np.array([pose_angles_3d])], axis=0)
+                    data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
+                    data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
+                fill_in_frames(data[index],(len(data[index])-2-num_previous_faulty_frames),(len(data[index])-1)) #Fill in faulty frames
                 previous_frame_faulty=False
             else:
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
