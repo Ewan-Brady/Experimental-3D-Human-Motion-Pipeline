@@ -284,6 +284,17 @@ def process_clip(data, fill_in_cutoff):
         segment_starts_ends[i] = [initial,final]
         i+=1
     
+    """
+    By uncommenting this you can test how the data splits in varying ways if different gap indictators are ordered.
+    contious_segment_lengths = [2,13,1,6,2]
+    segment_starts_ends = {}
+    segment_starts_ends[0] = [0,1]
+    segment_starts_ends[1] = [2,14]
+    segment_starts_ends[2] = [15,15]
+    segment_starts_ends[3] = [16,21]
+    segment_starts_ends[4] = [22,23]
+    """
+    
     #This gets +1 for odd indexes and 0 for even indexes
     #It identifies whether the maximum segments index is even or odd.
     max_index =  contious_segment_lengths.index(max(contious_segment_lengths))
@@ -300,11 +311,14 @@ def process_clip(data, fill_in_cutoff):
     2. It is a background/brief snap glitch:
                    -In this case the length of the "odd" segment will be small, and the parity of the opposite parity segment should be swapped
     
+    Finally, if it is short and the first or last segment then it must always be deleted as there is insufficent information to fill it in.
+                   
     two loops, one going forward one going backward. 
     """
     indexes_to_fill_in = [] #Segment indexes in this liast are marked to be filled in by approximation.
-    indexes_to_split = [] #Segment indexes in this list are marked to have a split occur between them and the proceeding segment.
-    
+    indexes_to_split = [] #Segment indexes in this list are marked to have a split occur between them and the previous segment.
+    remove_last_segment = False
+    remove_first_segment = False
     #Forward loop
     loop_current_parity = odd_or_even+1 #Gets a number of the opposite parity of the index of the max index.
     for segment in range(max_index,(len(contious_segment_lengths))):
@@ -314,6 +328,8 @@ def process_clip(data, fill_in_cutoff):
             if(contious_segment_lengths[segment] > fill_in_cutoff):
                 indexes_to_split.append(segment)
                 loop_current_parity += 1 #Swap the parity being checked.
+            elif (segment == (len(contious_segment_lengths)-1)): 
+                remove_last_segment = True #Last frame is a short glitch, insufficent information to fill it in
             else:
                 indexes_to_fill_in.append(segment)
                 
@@ -327,6 +343,8 @@ def process_clip(data, fill_in_cutoff):
             if(contious_segment_lengths[segment] > fill_in_cutoff):
                 indexes_to_split.append((segment+1))
                 loop_current_parity += 1 #Swap the parity being checked.
+            elif (segment == 0):
+                remove_first_segment = True #First frame is a short glitch, insufficent information to fill it in.
             else:
                 indexes_to_fill_in.append(segment)
 
@@ -338,10 +356,54 @@ def process_clip(data, fill_in_cutoff):
     fill-ins, and frame removals as nessecary. 
         -Remember to account for the fact that initial and final frames can not be filled in.
     """
+    #First, do fill-ins.
+    for index in indexes_to_fill_in:
+        if(index != 0 and index != (len(contious_segment_lengths)-1)): #Check that not start or end frame as those cant be filled in.
+            start_and_end = segment_starts_ends[index]
+            data = fill_in_frames(data,(start_and_end[0]-1),(start_and_end[1]+1)) 
 
-    return []
-
+    #Second, remove front and rear segments if nessecary
+    covered_frames = 0 #Number of beginning indexes removed from data. 
+    if remove_last_segment:
+        final_segment_start = segment_starts_ends[(len(contious_segment_lengths)-1)][0]
+        for i in range(len(data)):
+            data[i] = data[i][:final_segment_start,...]
+    if remove_first_segment:
+        second_segment_start = segment_starts_ends[1][0]
+        for i in range(len(data)):
+            data[i] = data[i][second_segment_start:,...]
+        covered_frames = contious_segment_lengths[0] #First segment size is equal to number of frames removed.
     
+    #Finally, split into separate lists as ordered
+    to_return = []
+    for end_segment in indexes_to_split:
+        end_segment_start = segment_starts_ends[end_segment][0]-covered_frames
+        
+        previous_segment = []
+        for i in data: #Add cut off segment to info to be returned
+            previous_segment.append(i[:end_segment_start,...])
+        to_return.append(previous_segment)
+        
+        covered_frames += contious_segment_lengths[(end_segment-1)]
+        
+        for i in range(len(data)): #remove cut off segment from data.
+            data[i] = data[i][end_segment_start:,...]
+    to_return.append(data)
+    
+    print(contious_segment_lengths)
+    for i in to_return:
+        print(str(i[0].shape) + " " + str(i[1].shape) + " " + str(i[2].shape) + " " + str(i[3].shape))
+        
+    return to_return
+
+"""
+In a given clip, attempts to extrapolate the start and end frames (exclusive, I.E. the frames in between start and end),
+assuming the frames in between are corrupted in some way and are not to be used so need to be filled-in by estimations. 
+"""
+def fill_in_frames(clip, start, end):
+    print("TODO, In progress")
+    return clip
+
 
 """
 removes clips in data below minimum allowable length
