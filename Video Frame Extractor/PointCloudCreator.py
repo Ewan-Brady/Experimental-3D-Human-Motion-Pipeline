@@ -117,6 +117,7 @@ and the directory where the depth data is stored, split the data into usable tra
 for training (the processing is done by pose_extract_3d, but you need to split the data first.)
 """
 minimum_video_frames = 20 #discard all data clips that are below this frame length. 
+fill_in_cutoff = 2 #Attempt to Fill in all gaps of this length or lower.
 def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clouds, video_name):
     """
     load skseleton data from file
@@ -207,7 +208,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     """
     processed_data = []
     for clip in data:
-        clips = process_clip(clip)
+        clips = process_clip(clip, fill_in_cutoff)
         processed_data = processed_data + clips
     data = processed_data
     
@@ -233,13 +234,12 @@ The main issues it identifies are:
      In this case in splits the clip.
 """
 z_score_cutoff = 1.75 #The z-score cutoff to determine which lengths are large enough jumps to be anomalies
-def process_clip(data):
+def process_clip(data, fill_in_cutoff):
     head_gaps = [] #This is a list of the distances between frames
     for i in range((len(data[3])-1)):
         distance_vector = data[3][i]-data[3][(i+1)]
         distance = np.sqrt(np.sum(np.square(distance_vector)))
         head_gaps.append(distance)
-    
     gap_indicators = []
     """
     To find the gap indicators we need to do some statistics to find large deviations from the mean,
@@ -259,26 +259,85 @@ def process_clip(data):
     standard_deviation = (sum_for_deviation/(len(head_gaps)-1))**0.5
     
     #Calculate z scores and use to find large jumps in data.
+    gap_indicators.append(-1) #First and final gaps should also be marked 
     for i4 in range(len(head_gaps)):
         z_score = (head_gaps[i4]-mean)/standard_deviation
         if(z_score > z_score_cutoff): #Large jump identified
             gap_indicators.append(i4)
-        elif (i4 == 0 or i4 == (len(head_gaps)-1)): #First and final frame should also be marked to identify continious segments. 
-            gap_indicators.append(i4)
+    gap_indicators.append(len(head_gaps))#First and final gaps should also be marked 
+
     """
     Now that we have identified the frames with large gaps we can identify whether it is a brief change in position or
     a permanent one, and implement the corresponding changes.
     """
     #Use the largest continious length as the baseline for which is correct and which is anomaly.
-    contious_segment_lengths = []   
+    contious_segment_lengths = []
+    #This keeps track of the starting and ending points for each index in continious_segment_lengths for later usage
+    segment_starts_ends = {} 
+    i = 0
     for initial_index in range((len(gap_indicators)-1)):
-        initial = gap_indicators[initial_index]
+        initial = gap_indicators[initial_index]+1
         final = gap_indicators[initial_index+1]
-        length = final-initial
+        length = final-initial+1
         contious_segment_lengths.append(length)
-    print(gap_indicators)
-    print(contious_segment_lengths)
+        
+        segment_starts_ends[i] = [initial,final]
+        i+=1
     
+    #This gets +1 for odd indexes and 0 for even indexes
+    #It identifies whether the maximum segments index is even or odd.
+    max_index =  contious_segment_lengths.index(max(contious_segment_lengths))
+    odd_or_even = max_index%2 
+    
+    """
+    This loop identifies whether the gaps between each segment are caused by a camera-jump or a brief/fill-innable error.
+    
+    Process:
+    Loop through pairs
+    The cause of a gap can be one of two things:
+    1. It is a camera cut: 
+                   -In this case the length of the opposite parity segment will be small
+    2. It is a background/brief snap glitch:
+                   -In this case the length of the "odd" segment will be small, and the parity of the opposite parity segment should be swapped
+    
+    two loops, one going forward one going backward. 
+    """
+    indexes_to_fill_in = [] #Segment indexes in this liast are marked to be filled in by approximation.
+    indexes_to_split = [] #Segment indexes in this list are marked to have a split occur between them and the proceeding segment.
+    
+    #Forward loop
+    loop_current_parity = odd_or_even+1 #Gets a number of the opposite parity of the index of the max index.
+    for segment in range(max_index,(len(contious_segment_lengths))):
+        #If loop_odd_or_even_1 is odd this triggers when segment is an odd number,
+        #If loop_odd_or_even_1 is even this triggers when segment is an even number
+        if((segment+loop_current_parity)%2==0):
+            if(contious_segment_lengths[segment] > fill_in_cutoff):
+                indexes_to_split.append(segment)
+                loop_current_parity += 1 #Swap the parity being checked.
+            else:
+                indexes_to_fill_in.append(segment)
+                
+    
+    #Backward loop
+    loop_current_parity = odd_or_even+1 #Reset parity for reverse loop
+    for segment in range(max_index,-1,-1):
+        #If loop_odd_or_even_1 is odd this triggers when segment is an odd number,
+        #If loop_odd_or_even_1 is even this triggers when segment is an even number
+        if((segment+loop_current_parity)%2==0):
+            if(contious_segment_lengths[segment] > fill_in_cutoff):
+                indexes_to_split.append((segment+1))
+                loop_current_parity += 1 #Swap the parity being checked.
+            else:
+                indexes_to_fill_in.append(segment)
+
+    indexes_to_fill_in.sort()
+    indexes_to_split.sort()
+    
+    """
+    Use indexes_to_fill_in, indexes_to_split, and segment_starts_ends to order and execute splits,
+    fill-ins, and frame removals as nessecary. 
+        -Remember to account for the fact that initial and final frames can not be filled in.
+    """
 
     return []
 
