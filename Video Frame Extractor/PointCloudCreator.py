@@ -759,6 +759,20 @@ The frame extraction function however works for whatever, it just spits out its 
 into whatever is set as the current directory for the program, and you can feed an absolute path
 into the function as input. 
 """
+
+covered_list_file = "/mnt/e/ML-Training-Data/HMDB51/Dataset/PointCloudsCoveredList.txt"
+#Yoinked these from google to save time.
+def add_to_covered_list(covered):
+    try: 
+        with open(covered_list_file, 'a') as file: 
+            file.write(covered + '\n') 
+    except Exception as e: 
+        print(f"Error: {e}")
+def checK_covered_list(to_check): 
+    with open(covered_list_file, 'r') as fp: 
+         data = fp.read() 
+         return to_check in data     
+
 inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" 
 depthDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths"
 poseData2D_Directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/2D/"
@@ -800,10 +814,12 @@ for action in actions: #now that we have created the nessecary directories, we c
             if keyword in video:
                 bother_with_video=True
                 
-        if(os.path.exists((action_output_directory + "/" + video + "_clip_0/pointcloud.npy"))): #Skips finished files to resume.
+        to_check = action_output_directory + "/" + video
+        if(os.path.exists((to_check + "_clip_0/pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
             skip_occured = True
             skips = skips + 1
             continue
+        
         if(skip_occured):
             print("Skipped " + str(skips) + " times to " + video)
             skips = 0
@@ -833,8 +849,8 @@ for action in actions: #now that we have created the nessecary directories, we c
                 np.save((target_location+"/pointcloud"),to_save_pointcloud)
                 
                 clips_saved += 1
-                
-            videos_covered += 1
+                videos_covered += 1
+        add_to_covered_list(to_check)
                         
     print(action + " done...")
 
