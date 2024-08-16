@@ -831,7 +831,11 @@ for action in actions: #now that we have created the nessecary directories, we c
             pose_data_2d = poseData2D_Directory +"/" + action + "/" + video + ".npy"
             pose_data_3d = poseData3D_Directory +"/" + action + "/" + video +  ".npy"
         
-            point_clouds = convert_directory(image_location,depth_location,video)
+            try:
+                point_clouds = convert_directory(image_location,depth_location,video)
+            except Exception:
+                print("Error occurred in creating pointcloud for " + action + "/" + video + ", skipping.")
+                continue #Added this because sometimes (very rare) the depth extractor does 1 less frame than the image extractor.
             data = process_data(pose_data_2d,pose_data_3d,depth_location,point_clouds,video)
         
             for i in range(len(data)):
@@ -850,6 +854,7 @@ for action in actions: #now that we have created the nessecary directories, we c
                 
                 clips_saved += 1
                 videos_covered += 1
+        
         add_to_covered_list(to_check)
                         
     print(action + " done...")

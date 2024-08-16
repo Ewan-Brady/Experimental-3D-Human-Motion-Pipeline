@@ -1,3 +1,4 @@
+#Environment is MonocularDepthEstimator2.
 depth_anything_directory = "/mnt/c/AI_model/3DMovementModel/Video Depth Estimator/Depth-Anything" #The directory of Depth-Anything
 import os
 import sys
@@ -62,14 +63,21 @@ transform = Compose([
 
 def save_video_depth_frames(directory, video_path):
     cap = cv2.VideoCapture(video_path)
-    
+
     i = 0
     while cap.isOpened():
-        ret, raw_image = cap.read()
+        target_location = directory + "_frame" + str(i)
 
+        ret, raw_image = cap.read()
         if not ret:
             break
-
+        
+        if(os.path.exists(target_location + ".npy")): #Skips finished files to resume.
+            #os.system('cls' if os.name == 'nt' else 'clear')
+            print(("Skiping: " + "{:05d}".format(i)), end = '\r')
+            i=i+1
+            continue #Directory exists, skip
+        
         raw_image = cv2.resize(raw_image, (640, 480))
 
         image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
@@ -82,7 +90,6 @@ def save_video_depth_frames(directory, video_path):
         with torch.no_grad():
             depth = depth_anything(image)
 
-        target_location = directory + "_frame" + str(i)
         np.save(target_location, depth.cpu().numpy())
         i=i+1
         """
@@ -156,7 +163,8 @@ for action in actions: #now that we have created the nessecary directories, we c
     for video in videos:
         #try:    
         frames_directory = (action_output_directory + "/" + video)
-        os.makedirs(frames_directory) #make directory for frames
+        if(not os.path.exists(frames_directory)):
+            os.makedirs(frames_directory) #make directory for frames
         os.chdir(frames_directory) #go to directory
     
         video_directory = (inputDirectory+"/"+action+"/"+ video)
