@@ -74,10 +74,12 @@ def save_video_depth_frames(directory, video_path):
         
         if(os.path.exists(target_location + ".npy")): #Skips finished files to resume.
             #os.system('cls' if os.name == 'nt' else 'clear')
-            print(("Skiping: " + "{:05d}".format(i)), end = '\r')
+            print(("Skipping:   " + "{:05d}".format(i)), end = '\r')
             i=i+1
             continue #Directory exists, skip
-        
+        else:
+            print(("Processing: " + "{:05d}".format(i)), end = '\r')
+
         raw_image = cv2.resize(raw_image, (640, 480))
 
         image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0

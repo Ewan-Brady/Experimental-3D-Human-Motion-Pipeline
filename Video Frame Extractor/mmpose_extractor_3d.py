@@ -174,6 +174,7 @@ def main():
         
         skip_occured = False
         skips = 0
+        videos_covered = 0
         for folder in frame_folders:
             frame_folder = action_directory+"/"+folder
             target_location_3D = outputDirectory + "/3D/" + action + "/"  + folder
@@ -188,13 +189,16 @@ def main():
                 skips = 0
                 skip_occured = False
 
+            print(("Covered " + str(videos_covered) + " videos."), end='\r')
+
             keypoint_frames_3D = extract_3d_frames(inferencer, frame_folder)
 
             keypoint_frames_2D = extract_2d_frames(model, frame_folder)
             
             np.save(target_location_2D, keypoint_frames_2D)
             np.save(target_location_3D, keypoint_frames_3D)
-
+            videos_covered = videos_covered+1
+        
             
         print(action + " done...")
         #with open(target_location, "w") as imagefile:

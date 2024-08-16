@@ -807,7 +807,7 @@ for action in actions: #now that we have created the nessecary directories, we c
     videos_covered = 0
     clips_saved = 0
     for video in videos:
-        print(("Covered " + str(videos_covered) + " videos, " + str(clips_saved) + " clips saved. Currently processing " + video), end='\r')
+        print(("Covered " + str(videos_covered) + " videos, " + str(clips_saved) + " clips saved."), end='\r')
         bother_with_video=False
         
         for keyword in quality_filter_keywords: #Check for required quality keywords before bothering to make training data with it. 
