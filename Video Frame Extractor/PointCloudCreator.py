@@ -193,6 +193,12 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 num_previous_faulty_frames = 0
                 previous_frame_faulty=False
             elif(previous_frame_faulty): #A small enough amount of previous frames were marked faulty to do a fill-in
+                """
+                This segment here allows for filling in of short segments of faulty frames.
+                
+                One possible concern is this and later fill-in steps could all occur around the same area, resulting in
+                too much data being fill in. We will see if this ends up being a large issue.
+                """
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
                 for i in range(num_previous_faulty_frames+1): #Concatenate the number of faulty frames +1, all but last will be replaced with fill-in
                     data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
@@ -200,6 +206,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                     data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
                     data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
                 fill_in_frames(data[index],(len(data[index])-2-num_previous_faulty_frames),(len(data[index])-1)) #Fill in faulty frames
+                num_previous_faulty_frames = 0
                 previous_frame_faulty=False
             else:
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
@@ -404,16 +411,16 @@ def process_clip(data, fill_in_cutoff):
     
     """
     Can uncomment this to see how it split
-    """ 
     print(contious_segment_lengths)
     for i in to_return:
         print(str(i[0].shape) + " " + str(i[1].shape) + " " + str(i[2].shape) + " " + str(i[3].shape))
+    """ 
 
     return to_return
 
 """
 In a given clip, attempts to extrapolate the start and end frames (exclusive, I.E. the frames in between start and end),
-assuming the frames in between are corrupted in some way and are not to be used so need to be filled-in by estimations. 
+assuming the frames in between are corrupted in some way and are not to be used so need to be filled-in by estimations.` 
 
 In the future we may implement a more advanced system which anaylzes the change in quaternions overtime to then determine 
 the changes in 3D pose point positions overtime, but for now we are just replacing it with the previous and next frame
@@ -505,7 +512,7 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             depth = depth_frame[xloc][yloc].item() #get the depth at that point
             extrapolated_2d_points.append(np.array([xloc,yloc,depth])) 
         except:
-            print("The 2d pose point was out of frame!")
+            #print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
     #extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
@@ -719,12 +726,14 @@ def shift_to_head(pose_data_3d, pointcloud):
 
 """
 Demonstration code:
-"""
-image_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
-depth_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
+
 video = "50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
-pose_data_2d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/2D/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi.npy"
-pose_data_3d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/run/50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi.npy"
+directory_end = "run/" + video
+
+image_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/" + directory_end
+depth_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/" + directory_end
+pose_data_2d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/2D/" + directory_end + ".npy"
+pose_data_3d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/" + directory_end + ".npy"
 array = convert_directory(image_directory, depth_directory,video)
 
 data = process_data(pose_data_2d,pose_data_3d,depth_directory,array,video);
@@ -741,16 +750,24 @@ with open("points.txt", "w") as text_file:
 with open("angles.txt", "w") as text_file:
     text_file.write(angles_3d_stringmade)
 """
+
+"""
 Copied the below codee from Video_Frame_Extractor.py and modified it. 
 
 The below iterator is made to extract from the HMDB51 dataset's directory structre. 
 The frame extraction function however works for whatever, it just spits out its output images
 into whatever is set as the current directory for the program, and you can feed an absolute path
 into the function as input. 
-
-inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" #The absolute directory where the input video dataset is stored.
+"""
+inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" 
 depthDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths"
-outputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Point Clouds" #The absolute directory where you want it to spit out the images.
+poseData2D_Directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/2D/"
+poseData3D_Directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/"
+
+outputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Point Clouds" 
+
+quality_filter_keywords = ["_med_", "_goo_"] #Requires these words be in the file in order to bother saving it
+
 
 os.chdir(inputDirectory) #First, go to the input directory and get its members
 actions = os.listdir() #got its members (and in HMDB51 also corresponds to main action)
@@ -771,15 +788,54 @@ for action in actions: #now that we have created the nessecary directories, we c
     action_output_directory = (outputDirectory + "/" + action)
     os.chdir(action_output_directory) #return to output directory for action
 
+    skip_occured = False
+    skips = 0
+    videos_covered = 0
+    clips_saved = 0
     for video in videos:
-        depth_location = depthDirectory +"/" + action + "/" + video
-        image_location = inputDirectory +"/" + action + "/" + video
-        output = convert_directory(image_location,depth_location,video)    
-        target_location = action_output_directory + "/" + video + "_pointcloud"
-
-        np.save(target_location,output)
+        bother_with_video=False
         
+        for keyword in quality_filter_keywords: #Check for required quality keywords before bothering to make training data with it. 
+            if keyword in video:
+                bother_with_video=True
+                
+        if(os.path.exists((action_output_directory + "/" + video + "_clip_0/pointcloud.npy"))): #Skips finished files to resume.
+            skip_occured = True
+            skips = skips + 1
+            continue
+        if(skip_occured):
+            print("Skipped " + str(skips) + " times to " + video)
+            skips = 0
+            skip_occured = False
+
+        if bother_with_video:
+            depth_location = depthDirectory +"/" + action + "/" + video
+            image_location = inputDirectory +"/" + action + "/" + video
+            pose_data_2d = poseData2D_Directory +"/" + action + "/" + video + ".npy"
+            pose_data_3d = poseData3D_Directory +"/" + action + "/" + video +  ".npy"
+        
+            point_clouds = convert_directory(image_location,depth_location,video)
+            data = process_data(pose_data_2d,pose_data_3d,depth_location,point_clouds,video)
+        
+            for i in range(len(data)):
+                target_location = action_output_directory + "/" + video + "_clip_" + str(i)
+
+                if(not os.path.exists(target_location)):
+                    os.makedirs(target_location) #Create action output directory if it does not exist
+                
+                to_save_3D_pose = data[i][0] #Do not need to save head positions segment, just first 3 elements.
+                to_save_3D_angle = data[i][1]
+                to_save_pointcloud = data[i][2]
+                
+                np.save((target_location+"/skeleton_points"),to_save_3D_pose)
+                np.save((target_location+"/skeleton_angles"),to_save_3D_angle)
+                np.save((target_location+"/pointcloud"),to_save_pointcloud)
+                
+                clips_saved += 1
+                
+            videos_covered += 1
+            print(("Covered " + str(videos_covered) + " videos, " + str(clips_saved) + " clips saved."), end='\r')
+                        
     print(action + " done...")
 
-print("image extraction complete!")
-"""
+print("Processing complete!")
