@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import math
 import os
+import sys
 
 depth_multiplier = 2 #Can be any number, set it to two as I think it makes pointclouds look better/more accurate
 FOV = 53 * math.pi/180
@@ -724,6 +725,7 @@ def shift_to_head(pose_data_3d, pointcloud):
 
     return pose_data_3d, pointcloud
 
+
 """
 Demonstration code:
 
@@ -760,103 +762,152 @@ into whatever is set as the current directory for the program, and you can feed 
 into the function as input. 
 """
 
-covered_list_file = "/mnt/e/ML-Training-Data/HMDB51/Dataset/PointCloudsCoveredList.txt"
-#Yoinked these from google to save time.
-def add_to_covered_list(covered):
-    try: 
-        with open(covered_list_file, 'a') as file: 
-            file.write(covered + '\n') 
-    except Exception as e: 
-        print(f"Error: {e}")
-def checK_covered_list(to_check): 
-    with open(covered_list_file, 'r') as fp: 
-         data = fp.read() 
-         return to_check in data     
+def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/"):
+    covered_list_file = dataset_directory + "PointCloudsCoveredList.txt"
+    #Yoinked these from google to save time.
+    def add_to_covered_list(covered):
+        try: 
+            with open(covered_list_file, 'a') as file: 
+                file.write(covered + '\n') 
+        except Exception as e: 
+            print(f"Error: {e}")
+    def checK_covered_list(to_check): 
+        with open(covered_list_file, 'r') as fp: 
+             data = fp.read() 
+             return to_check in data     
 
-inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" 
-depthDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths"
-poseData2D_Directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/2D/"
-poseData3D_Directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/"
+    inputDirectory = dataset_directory + "Dataset Extracted Images" 
+    depthDirectory = dataset_directory + "Dataset Extracted Depths"
+    poseData2D_Directory = dataset_directory + "Dataset Pose Estimations/2D/"
+    poseData3D_Directory = dataset_directory + "Dataset Pose Estimations/3D/"
 
-outputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Point Clouds" 
+    outputDirectory = dataset_directory + "Dataset Extracted Point Clouds" 
 
-quality_filter_keywords = ["_med_", "_goo_"] #Requires these words be in the file in order to bother saving it
-
-
-os.chdir(inputDirectory) #First, go to the input directory and get its members
-actions = os.listdir() #got its members (and in HMDB51 also corresponds to main action)
+    quality_filter_keywords = ["_med_", "_goo_"] #Requires these words be in the file in order to bother saving it
 
 
-os.chdir(outputDirectory) #now, create corresponding output directories for each action
-for action in actions: 
-    action_path = outputDirectory + "/" + action
-    if(not os.path.exists(action_path)):
-        os.makedirs(action_path) #Create action output directory if it does not exist
+    os.chdir(inputDirectory) #First, go to the input directory and get its members
+    actions = os.listdir() #got its members (and in HMDB51 also corresponds to main action)
 
 
-for action in actions: #now that we have created the nessecary directories, we can extract the images into them
-    os.chdir(inputDirectory + "/" + action)
-    videos = os.listdir() #get a list of the input videos.
+    os.chdir(outputDirectory) #now, create corresponding output directories for each action
+    for action in actions: 
+        action_path = outputDirectory + "/" + action
+        if(not os.path.exists(action_path)):
+            os.makedirs(action_path) #Create action output directory if it does not exist
+
+
+    for action in actions: #now that we have created the nessecary directories, we can extract the images into them
+        os.chdir(inputDirectory + "/" + action)
+        videos = os.listdir() #get a list of the input videos.
     
     
-    action_output_directory = (outputDirectory + "/" + action)
-    os.chdir(action_output_directory) #return to output directory for action
+        action_output_directory = (outputDirectory + "/" + action)
+        os.chdir(action_output_directory) #return to output directory for action
 
-    skip_occured = False
-    skips = 0
-    videos_covered = 0
-    clips_saved = 0
-    for video in videos:
-        print(("Covered " + str(videos_covered) + " videos, " + str(clips_saved) + " clips saved."), end='\r')
-        bother_with_video=False
+        skip_occured = False
+        skips = 0
+        videos_covered = 0
+        clips_saved = 0
+        for video in videos:
+            print(("Covered " + str(videos_covered) + " videos, " + str(clips_saved) + " clips saved."), end='\r')
+            bother_with_video=False
         
-        for keyword in quality_filter_keywords: #Check for required quality keywords before bothering to make training data with it. 
-            if keyword in video:
-                bother_with_video=True
+            for keyword in quality_filter_keywords: #Check for required quality keywords before bothering to make training data with it. 
+                if keyword in video:
+                    bother_with_video=True
                 
-        to_check = action_output_directory + "/" + video
-        if(os.path.exists((to_check + "_clip_0/pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
-            skip_occured = True
-            skips = skips + 1
-            continue
+            to_check = action_output_directory + "/" + video
+            if(os.path.exists((to_check + "_clip_0/pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
+                skip_occured = True
+                skips = skips + 1
+                continue
         
-        if(skip_occured):
-            print("Skipped " + str(skips) + " times to " + video)
-            skips = 0
-            skip_occured = False
+            if(skip_occured):
+                print("Skipped " + str(skips) + " times to " + video)
+                skips = 0
+                skip_occured = False
 
-        if bother_with_video:
-            depth_location = depthDirectory +"/" + action + "/" + video
-            image_location = inputDirectory +"/" + action + "/" + video
-            pose_data_2d = poseData2D_Directory +"/" + action + "/" + video + ".npy"
-            pose_data_3d = poseData3D_Directory +"/" + action + "/" + video +  ".npy"
+            if bother_with_video:
+                depth_location = depthDirectory +"/" + action + "/" + video
+                image_location = inputDirectory +"/" + action + "/" + video
+                pose_data_2d = poseData2D_Directory +"/" + action + "/" + video + ".npy"
+                pose_data_3d = poseData3D_Directory +"/" + action + "/" + video +  ".npy"
         
-            try:
-                point_clouds = convert_directory(image_location,depth_location,video)
-            except Exception:
-                print("Error occurred in creating pointcloud for " + action + "/" + video + ", skipping.")
-                continue #Added this because sometimes (very rare) the depth extractor does 1 less frame than the image extractor.
-            data = process_data(pose_data_2d,pose_data_3d,depth_location,point_clouds,video)
+                try:
+                    point_clouds = convert_directory(image_location,depth_location,video)
+                except Exception:
+                    print("Error occurred in creating pointcloud for " + action + "/" + video + ", skipping.")
+                    continue #Added this because sometimes (very rare) the depth extractor does 1 less frame than the image extractor.
+                data = process_data(pose_data_2d,pose_data_3d,depth_location,point_clouds,video)
         
-            for i in range(len(data)):
-                target_location = action_output_directory + "/" + video + "_clip_" + str(i)
+                for i in range(len(data)):
+                    target_location = action_output_directory + "/" + video + "_clip_" + str(i)
 
-                if(not os.path.exists(target_location)):
-                    os.makedirs(target_location) #Create action output directory if it does not exist
+                    if(not os.path.exists(target_location)):
+                        os.makedirs(target_location) #Create action output directory if it does not exist
                 
-                to_save_3D_pose = data[i][0] #Do not need to save head positions segment, just first 3 elements.
-                to_save_3D_angle = data[i][1]
-                to_save_pointcloud = data[i][2]
+                    to_save_3D_pose = data[i][0] #Do not need to save head positions segment, just first 3 elements.
+                    to_save_3D_angle = data[i][1]
+                    to_save_pointcloud = data[i][2]
                 
-                np.save((target_location+"/skeleton_points"),to_save_3D_pose)
-                np.save((target_location+"/skeleton_angles"),to_save_3D_angle)
-                np.save((target_location+"/pointcloud"),to_save_pointcloud)
+                    np.save((target_location+"/skeleton_points"),to_save_3D_pose)
+                    np.save((target_location+"/skeleton_angles"),to_save_3D_angle)
+                    np.save((target_location+"/pointcloud"),to_save_pointcloud)
                 
-                clips_saved += 1
-                videos_covered += 1
+                    clips_saved += 1
+                    videos_covered += 1
         
-        add_to_covered_list(to_check)
+            add_to_covered_list(to_check)
                         
-    print(action + " done...")
+        print(action + " done...")
 
-print("Processing complete!")
+    print("Processing complete!")
+    
+def pointcloud_video_totext(inp_directory, out_directory = os.getcwd()):
+    
+    pointclouds = np.load((inp_directory + "/pointcloud.npy"))
+    pose_points = np.load((inp_directory + "/skeleton_points.npy"))
+    angles = np.load((inp_directory + "/skeleton_angles.npy"))
+
+    pointcloud_stringmade = numpy_vid_to_text(pointclouds)
+    points_3d_stringmade = numpy_vid_to_text(pose_points)
+    angles_3d_stringmade = numpy_vid_to_text(angles)
+
+    os.chdir(out_directory)
+    with open("pointclouds.txt", "w") as text_file:
+        text_file.write(pointcloud_stringmade)
+    with open("points.txt", "w") as text_file:
+        text_file.write(points_3d_stringmade)
+    with open("angles.txt", "w") as text_file:
+        text_file.write(angles_3d_stringmade)
+    
+
+"""
+Can either have file create pointclouds from data, or convert those pointclouds into text files.
+
+If first argument is to_text, it will convert the specified PointCloudVideo directory (second argument) into text
+files outputted in the specified directory (third arguement). In this case 2 arguments are required or will raise an
+error. Third arguement is optional as it is assumed to be current directory if unspecified.
+
+If first arguement is anything else it will run the data iterator to convert depth, pose, and image data into
+pointclouds. If the first arguement is blank it will assume the dataset is at its default location, if it is not blank
+it will use the first arguement as the location for the dataset. 
+
+"""
+args = sys.argv[1:]
+if(args[0] == "to_text"):
+    if(len(args) < 2):
+        raise Exception("to_text requires at least 2 additional arguements for PointCloudVideo input directory and output location.")
+    else:
+        if(len(args) == 2):
+            pointcloud_video_totext(args[1])
+        else:
+            pointcloud_video_totext(args[1], args[2])
+else:
+    print("Making point clouds from depth, pose, and image data")
+    print()
+    if(len(args) > 0):
+        from_data_iterator(args[0])
+    else:
+        from_data_iterator()
