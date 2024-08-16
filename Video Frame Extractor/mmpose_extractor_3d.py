@@ -19,6 +19,9 @@ import cv2
 
 confidence_threshhold = 0.8 #discard results below this level of confidence
 
+bodypart_confidence_threshhold = 0.5
+required_portion_body_parts = 15/17
+
 #Old args
 mmpose_path = "/mnt/c/AI_model/3DMovementModel/Video Pose Estimator/mmpose/"
 
@@ -50,14 +53,26 @@ def extract_2d_frames(model, frames_folder_2d):
         batch_results = inference_topdown(model, img)
         results = merge_data_samples(batch_results).pred_instances
         
-        strikes = 0
+        head_strikes = 0
+        
+        body_strikes = 0
+        visible_body_parts = 0
         
         frame_visible = True
         for i2 in range(5): #Check first 5 keypoints are in bounds.
             if(results.keypoints_visible[0][i2] < confidence_threshhold): #Check for likely not visible head points.
-                strikes = strikes+1
-                if(strikes > 4):
+                head_strikes = head_strikes+1
+                if(head_strikes > 4):
                     frame_visible = False
+        
+        for i4 in results.keypoints_visible[0]: #Count number of visible body parts
+            #print(i4)
+            if(i4 >= bodypart_confidence_threshhold):
+                visible_body_parts+=1
+        #Determine if percentage of visible body parts is below the threshhold.
+        if((visible_body_parts/len(results.keypoints_visible[0]))<required_portion_body_parts):
+            frame_visible = False
+
         if(frame_visible == False):
             strikes2 = strikes2+1
         else:
