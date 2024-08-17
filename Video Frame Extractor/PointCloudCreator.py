@@ -81,7 +81,8 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
 
         point[0] = direction_vector[0]
         point[1] = direction_vector[1]
-        #point[2] = direction_vector[2]
+                
+        #point[2] = direction_vector[2] #THIS WAS COMMENTED OUT BEFORE
 
     return array
 
@@ -149,7 +150,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
             faulty_frames.append(i)
             
         #Copypasted from pointcloud functions, use this to get depth for frame
-        depth_frame = (depth_directory+ "/" + video + "_frame" + str(i) + ".npy")
+        depth_frame = (depth_directory+ "/" + video_name + "_frame" + str(i) + ".npy")
 
         depth_frame = np.load(depth_frame)
         depth_frame = np.transpose(depth_frame, (1, 2, 0))
@@ -896,6 +897,11 @@ it will use the first arguement as the location for the dataset.
 
 """
 args = sys.argv[1:]
+if(len(args)==0):
+    print("Making point clouds from depth, pose, and image data")
+    print()
+    from_data_iterator()
+    exit()
 if(args[0] == "to_text"):
     if(len(args) < 2):
         raise Exception("to_text requires at least 2 additional arguements for PointCloudVideo input directory and output location.")
@@ -904,10 +910,9 @@ if(args[0] == "to_text"):
             pointcloud_video_totext(args[1])
         else:
             pointcloud_video_totext(args[1], args[2])
+    exit()
 else:
     print("Making point clouds from depth, pose, and image data")
     print()
-    if(len(args) > 0):
-        from_data_iterator(args[0])
-    else:
-        from_data_iterator()
+    from_data_iterator(args[0])
+    exit()
