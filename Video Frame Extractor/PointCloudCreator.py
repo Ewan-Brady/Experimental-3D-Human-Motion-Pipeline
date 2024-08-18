@@ -256,6 +256,9 @@ The main issues it identifies are:
 """
 z_score_cutoff = 1.75 #The z-score cutoff to determine which lengths are large enough jumps to be anomalies
 def process_clip(data, fill_in_cutoff):
+    """
+    First find gap indicators from the head suddenly changing position.
+    """
     head_gaps = [] #This is a list of the distances between frames
     for i in range((len(data[3])-1)):
         distance_vector = data[3][i]-data[3][(i+1)]
@@ -269,7 +272,7 @@ def process_clip(data, fill_in_cutoff):
     #Calculate mean
     sum_for_mean = 0
     for i2 in head_gaps:
-        sum_for_mean = sum_for_mean+i
+        sum_for_mean = sum_for_mean+i2 #THIS WAS i before, an error but it still worked somehow, see how fixing it impacts
     mean = sum_for_mean/len(head_gaps)
     
     #Calculate standard deviation
@@ -285,10 +288,53 @@ def process_clip(data, fill_in_cutoff):
         z_score = (head_gaps[i4]-mean)/standard_deviation
         if(z_score > z_score_cutoff): #Large jump identified
             gap_indicators.append(i4)
-    gap_indicators.append(len(head_gaps))#First and final gaps should also be marked 
 
     """
-    Now that we have identified the frames with large gaps we can identify whether it is a brief change in position or
+    Now detect gaps based on sudden increases in the average distances between points, I.E. changes in the size of the individual.
+    
+    First find the average distances/pose size for each frame.
+    """
+    pose_sizes = []
+    for i in data[0]:
+        point_distances = []
+        covered_points = []
+        for i2 in i:
+            covered_points.append(i2)
+            for i3 in i:
+                if not i3 in covered_points:
+                    distance_vector = i2-i3
+                    distance = np.sqrt(np.sum(np.square(distance_vector)))
+                    point_distances.append(distance)
+        mean_distance = sum(point_distances)/len(point_distances)
+        pose_sizes.append(mean_distance)
+                   
+    #Now find the gaps between sizes for each frame
+    size_gaps = [] #This is a list of the distances between frames
+    for i in range((len(pose_sizes)-1)):
+        gap = abs(pose_sizes[i]-pose_sizes[(i+1)])
+        size_gaps.append(gap)
+        print(gap) 
+        
+    #If size_gaps and head_gaps are different lengths something went wrong.
+    if len(size_gaps) != len(head_gaps):
+        raise Exception("Different number of head gaps than pose size gaps.")
+    
+    """
+    Do same statistics on size gaps as on head gaps.
+    """
+    mean = sum(size_gaps)/len(size_gaps)
+    
+    #Calculate standard deviation
+    sum_for_deviation = 0
+    for i3 in size_gaps:
+        sum_for_deviation = sum_for_deviation+((i3-mean)**2)
+    
+    standard_deviation = (sum_for_deviation/(len(size_gaps)-1))**0.5
+
+
+
+    """
+    Now that we have identified the frames with gaps we can identify whether it is a brief change in position or
     a permanent one, and implement the corresponding changes.
     """
     #Use the largest continious length as the baseline for which is correct and which is anomaly.
@@ -484,12 +530,14 @@ Returns the position of the head before it is shifted to the origin, I.E. the po
 """
 def pose_extract_3d(skeleton_data_2d_frame, skeleton_data_3d_frame, depth_frame, point_cloud_frame):
     
-    skeleton_points_3d = from_2d_get_3d(skeleton_data_3d_frame, skeleton_data_2d_frame, depth_frame)
+    skeleton_points_3d, depth_multipler = from_2d_get_3d(skeleton_data_3d_frame, skeleton_data_2d_frame, depth_frame)
     
     unaltered_head_position = np.copy(skeleton_points_3d[9]) #Use this for later analysis of head positions
 
     skeleton_angles_3d = get_3d_angles(skeleton_points_3d)
     
+    point_cloud_frame[:, 2] *= depth_multipler
+
     skeleton_points_3d, point_cloud_frame = shift_to_head(skeleton_points_3d, point_cloud_frame)
 
     return skeleton_points_3d, skeleton_angles_3d, point_cloud_frame, unaltered_head_position
@@ -517,8 +565,8 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             #print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
-    #extrapolated_2d_points[:, [0,1]] = extrapolated_2d_points[:, [1,0]] #TEST
-    #extrapolated_2d_points[:, [2,1]] = extrapolated_2d_points[:, [1,2]] #TEST
+    
+   
     """
     Using points that 2D and 3D keypoints have in common, make an average conversion factor between the
     space of the 3D points and the pointcloud space.
@@ -567,7 +615,8 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             new_extrapolated_position = (pose_vector_3D/np.sqrt(np.sum(np.square(pose_vector_3D))))*mini_conversionfactor + head_pos_2D
             extrapolated_2d_points[point] = new_extrapolated_position
     
-    
+    #extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) 
+
     #extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
 
     for i in common_points_2d_3d: #Loop through each point
@@ -590,6 +639,11 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     and the nonpixelspace 3d points. 
     """
     head_position = extrapolated_2d_points[0] #Using the 2D mouth as the extrapolated head position
+    
+    #head_position = np.array([head_position])
+    #head_position = cloud_FOV_spread(head_position, FOV, FOV, 320, 240) #Spread head location
+    #head_position = head_position[0]
+    
     #print(head_position)
     pixelspace_points_3d = []
     for i in range(len(pose_frame_3d)):
@@ -620,6 +674,13 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     the eyes (10), then making that vector the same length as the vector to the mouth, before finally adding
     this vector to the middle shoulder point (8)
     """
+    
+    """
+    Stack found pixelspace 3d points and spread.
+    
+    Also make some alterations to the z points post-spread to make them better match the pre-spread pose.
+    """
+    
     direction_vector = pixelspace_points_3d[10]-pixelspace_points_3d[9] #get direction vector
     magnitude_vector = pixelspace_points_3d[9]-pixelspace_points_3d[8] #Use this to get desired magnitude
     unit_vector = direction_vector/np.sqrt(np.sum(np.square(direction_vector))) #get unit vector of direction vector
@@ -628,16 +689,42 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     
     pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
 
-    """
-    Stack found pixelspace 3d points and spread.
-    """
+    z_dividedby_xy_ratios = [] 
+    for i in pixelspace_points_3d:
+        for i2 in pixelspace_points_3d:
+            if not np.array_equal(i2,i):
+                xy_vector = np.array([i[0],i[1]])-np.array([i2[0],i2[1]])
+                xy_distance = np.sqrt(np.sum(np.square(xy_vector)))
+                z_distance = abs(i[2]-i2[2])
+                z_dividedby_xy_ratios.append((z_distance/xy_distance))
+    average_z_xy_ratio = sum(z_dividedby_xy_ratios)/len(z_dividedby_xy_ratios)
+
     pixelspace_points_3d = np.stack(pixelspace_points_3d)
     pixelspace_points_3d = cloud_FOV_spread(pixelspace_points_3d, FOV, FOV, 320, 240) #Do FOV spread on limb points
+
+    xy_distances = [] 
+    z_distances = []
+    for i in pixelspace_points_3d:
+        for i2 in pixelspace_points_3d:
+            if not np.array_equal(i2,i):
+                xy_vector = np.array([i[0],i[1]])-np.array([i2[0],i2[1]])
+                xy_distance = np.sqrt(np.sum(np.square(xy_vector)))
+                z_distance = abs(i[2]-i2[2])
+                xy_distances.append((xy_distance))
+                z_distances.append(z_distance)
+    new_average_xy_distance = sum(xy_distances)/len(xy_distances)
+    new_average_z_distance = sum(z_distances)/len(z_distances)
+
+    new_desired_z_distance = new_average_xy_distance*average_z_xy_ratio
+    new_z_multiplier = new_desired_z_distance/new_average_z_distance
     
+    for i in pixelspace_points_3d:
+        i[2] *= new_z_multiplier
+
     """
-    Return pixelspace points.
+    Return pixelspace points and z multiplier.
     """
-    return pixelspace_points_3d
+    return pixelspace_points_3d, new_z_multiplier
 
 
 
@@ -857,8 +944,7 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
                     np.save((target_location+"/pointcloud"),to_save_pointcloud)
                 
                     clips_saved += 1
-                    videos_covered += 1
-        
+                videos_covered += 1
             add_to_covered_list(to_check)
                         
         print(action + " done...")
