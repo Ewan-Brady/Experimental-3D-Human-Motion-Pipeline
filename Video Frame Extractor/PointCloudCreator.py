@@ -267,27 +267,20 @@ def process_clip(data, fill_in_cutoff):
     gap_indicators = []
     """
     To find the gap indicators we need to do some statistics to find large deviations from the mean,
-    finding the mean, standard deviation, z score.
+    finding the mean, standard deviation, will later be used for z score.
     """
     #Calculate mean
     sum_for_mean = 0
     for i2 in head_gaps:
         sum_for_mean = sum_for_mean+i2 #THIS WAS i before, an error but it still worked somehow, see how fixing it impacts
-    mean = sum_for_mean/len(head_gaps)
+    mean_head = sum_for_mean/len(head_gaps)
     
     #Calculate standard deviation
     sum_for_deviation = 0
     for i3 in head_gaps:
-        sum_for_deviation = sum_for_deviation+((i3-mean)**2)
+        sum_for_deviation = sum_for_deviation+((i3-mean_head)**2)
     
-    standard_deviation = (sum_for_deviation/(len(head_gaps)-1))**0.5
-    
-    #Calculate z scores and use to find large jumps in data.
-    gap_indicators.append(-1) #First and final gaps should also be marked 
-    for i4 in range(len(head_gaps)):
-        z_score = (head_gaps[i4]-mean)/standard_deviation
-        if(z_score > z_score_cutoff): #Large jump identified
-            gap_indicators.append(i4)
+    standard_deviation_head = (sum_for_deviation/(len(head_gaps)-1))**0.5
 
     """
     Now detect gaps based on sudden increases in the average distances between points, I.E. changes in the size of the individual.
@@ -320,16 +313,29 @@ def process_clip(data, fill_in_cutoff):
         raise Exception("Different number of head gaps than pose size gaps.")
     
     """
-    Do same statistics on size gaps as on head gaps.
+    Do same statistics on size gaps as on head gaps, also to be used for z score.
     """
-    mean = sum(size_gaps)/len(size_gaps)
+    mean_sizes = sum(size_gaps)/len(size_gaps)
     
     #Calculate standard deviation
     sum_for_deviation = 0
     for i3 in size_gaps:
-        sum_for_deviation = sum_for_deviation+((i3-mean)**2)
+        sum_for_deviation = sum_for_deviation+((i3-mean_sizes)**2)
     
-    standard_deviation = (sum_for_deviation/(len(size_gaps)-1))**0.5
+    standard_deviation_sizes = (sum_for_deviation/(len(size_gaps)-1))**0.5
+    
+    """
+    Now calculate z scores for both head gaps and size gaps, and assign gap indicators based on z score.
+    """
+    #Calculate z scores and use to find large jumps in data.
+    gap_indicators.append(-1) #First and final gaps should also be marked 
+    for i4 in range(len(head_gaps)):
+        z_score_head = (head_gaps[i4]-mean_head)/standard_deviation_head
+        z_score_size = (size_gaps[i4]-mean_sizes)/standard_deviation_sizes
+
+        if(z_score_head > z_score_cutoff or z_score_size > z_score_cutoff): #Large jump identified
+            gap_indicators.append(i4)
+    gap_indicators.append(len(head_gaps))# Mark final gap 
 
 
 
