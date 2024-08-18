@@ -254,7 +254,8 @@ The main issues it identifies are:
      -Jumps from the head hanging out in one position to hanging out in another, likely caused by a camera angle change.
      In this case in splits the clip.
 """
-z_score_cutoff = 1.75 #The z-score cutoff to determine which lengths are large enough jumps to be anomalies
+z_score_cutoff_head = 1.75 #The z-score cutoff to determine which haed position changes are large enough jumps to be anomalies
+z_score_cutoff_size = 1 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
 def process_clip(data, fill_in_cutoff):
     """
     First find gap indicators from the head suddenly changing position.
@@ -332,12 +333,11 @@ def process_clip(data, fill_in_cutoff):
         z_score_head = (head_gaps[i4]-mean_head)/standard_deviation_head
         z_score_size = (size_gaps[i4]-mean_sizes)/standard_deviation_sizes
 
-        if(z_score_head > z_score_cutoff or z_score_size > z_score_cutoff): #Large jump identified
+        if(z_score_head > z_score_cutoff_head or z_score_size > z_score_cutoff_size): #Large jump identified
             gap_indicators.append(i4)
             
                 
     gap_indicators.append(len(head_gaps))# Mark final gap 
-
 
 
     """
@@ -553,7 +553,7 @@ def pose_extract_3d(skeleton_data_2d_frame, skeleton_data_3d_frame, depth_frame,
 From nonpixelspace 3d data, pixelspace 2d data, and depth data, get the
 pixelspace 3d data (including the actual location of the head) for a frame. 
 """
-head_square_2D_rad = 8 #How many pixels away from the original head position should it be able to move for depth correction
+head_square_2D_rad = 10 #How many pixels away from the original head position should it be able to move for depth correction
 def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     pose_frame_2d[:, 1] -= 120
     pose_frame_2d[:, 1] *= -1
@@ -574,21 +574,29 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
     
-    head_x = extrapolated_2d_points[0][0]
-    head_y = extrapolated_2d_points[0][1]
-    lowest_depth = extrapolated_2d_points[0][2]
+    head_x = round(extrapolated_2d_points[0][0].item())
+    head_y = round(extrapolated_2d_points[0][1].item())
+    lowest_depth = extrapolated_2d_points[0][2].item()
     new_x = head_x
     new_y = head_y
     for i in range(head_x-head_square_2D_rad-1, head_x+head_square_2D_rad):
         for i2 in range(head_y-head_square_2D_rad-1,head_y+head_square_2D_rad):
-            depth = depth_frame[i][i2].item()
-            if depth < lowest_depth: #New lowest depth value found, set new_x and new_y, head x and y will be changed to this location
-                lowest_depth = depth
-                new_x = i
-                new_y = i2
+            distance_vector = np.array([head_x,head_y])-np.array([i,i2])
+            distance_from_original = np.sqrt(np.sum(np.square(distance_vector)))
+            
+            if(distance_from_original<head_square_2D_rad): #Check if within specified radius of the head.
+                try:
+                    depth = depth_frame[i][i2].item()
+                    if depth < lowest_depth: #New lowest depth value found, set new_x and new_y, head x and y will be changed to this location
+                        lowest_depth = depth
+                        new_x = i
+                        new_y = i2
+                except Exception:
+                    pass
                 
     extrapolated_2d_points[0][0] = new_x
     extrapolated_2d_points[0][1] = new_y
+    extrapolated_2d_points[0][2] = lowest_depth
    
     """
     Using points that 2D and 3D keypoints have in common, make an average conversion factor between the
