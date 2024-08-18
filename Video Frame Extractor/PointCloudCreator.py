@@ -553,6 +553,7 @@ def pose_extract_3d(skeleton_data_2d_frame, skeleton_data_3d_frame, depth_frame,
 From nonpixelspace 3d data, pixelspace 2d data, and depth data, get the
 pixelspace 3d data (including the actual location of the head) for a frame. 
 """
+head_square_2D_rad = 8 #How many pixels away from the original head position should it be able to move for depth correction
 def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     pose_frame_2d[:, 1] -= 120
     pose_frame_2d[:, 1] *= -1
@@ -573,6 +574,21 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
     
+    head_x = extrapolated_2d_points[0][0]
+    head_y = extrapolated_2d_points[0][1]
+    lowest_depth = extrapolated_2d_points[0][2]
+    new_x = head_x
+    new_y = head_y
+    for i in range(head_x-head_square_2D_rad-1, head_x+head_square_2D_rad):
+        for i2 in range(head_y-head_square_2D_rad-1,head_y+head_square_2D_rad):
+            depth = depth_frame[i][i2].item()
+            if depth < lowest_depth: #New lowest depth value found, set new_x and new_y, head x and y will be changed to this location
+                lowest_depth = depth
+                new_x = i
+                new_y = i2
+                
+    extrapolated_2d_points[0][0] = new_x
+    extrapolated_2d_points[0][1] = new_y
    
     """
     Using points that 2D and 3D keypoints have in common, make an average conversion factor between the
