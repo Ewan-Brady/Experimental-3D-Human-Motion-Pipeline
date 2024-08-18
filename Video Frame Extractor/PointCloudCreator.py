@@ -291,11 +291,11 @@ def process_clip(data, fill_in_cutoff):
     for i in data[0]:
         point_distances = []
         covered_points = []
-        for i2 in i:
+        for i2 in range(len(i)):
             covered_points.append(i2)
-            for i3 in i:
+            for i3 in range(len(i)):
                 if not i3 in covered_points:
-                    distance_vector = i2-i3
+                    distance_vector = i[i2]-i[i3]
                     distance = np.sqrt(np.sum(np.square(distance_vector)))
                     point_distances.append(distance)
         mean_distance = sum(point_distances)/len(point_distances)
@@ -306,7 +306,6 @@ def process_clip(data, fill_in_cutoff):
     for i in range((len(pose_sizes)-1)):
         gap = abs(pose_sizes[i]-pose_sizes[(i+1)])
         size_gaps.append(gap)
-        print(gap) 
         
     #If size_gaps and head_gaps are different lengths something went wrong.
     if len(size_gaps) != len(head_gaps):
@@ -335,6 +334,8 @@ def process_clip(data, fill_in_cutoff):
 
         if(z_score_head > z_score_cutoff or z_score_size > z_score_cutoff): #Large jump identified
             gap_indicators.append(i4)
+            
+                
     gap_indicators.append(len(head_gaps))# Mark final gap 
 
 
