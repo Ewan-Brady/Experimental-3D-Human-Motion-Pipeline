@@ -148,7 +148,8 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         if(np.array_equal(skeleton_frames_2d[i],np.full(skeleton_frames_2d[i].shape,-1)) or 
            np.array_equal(skeleton_frames_3d[i],np.full(skeleton_frames_3d[i].shape,-1))):
             faulty_frames.append(i)
-            
+        
+        
         #Copypasted from pointcloud functions, use this to get depth for frame
         depth_frame = (depth_directory+ "/" + video_name + "_frame" + str(i) + ".npy")
 
@@ -187,6 +188,22 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         else:
             pose_points_3d, pose_angles_3d, point_cloud, head_pos = pose_extract_3d(skeleton_frames_2d[i2], skeleton_frames_3d[i2],
                                                                       depth_frames[i2], point_clouds[i2]) #Process frame
+            
+            """
+            Before adding it to the data, one last check should be done for if the frame is faulty or not.
+            Check by depth, if any pose point is below the mean depth it is probally in the background.
+            """
+            mean_depth = np.sum(point_cloud,axis=0)[2]/len(point_cloud)
+            current_frame_faulty = False
+            for i in pose_points_3d:
+                if i[2] > mean_depth:
+                    previous_frame_faulty = True #There is a point in the background, this frame is faulty.
+                    current_frame_faulty = True
+                    num_previous_faulty_frames += 1
+                    break
+            if current_frame_faulty: #Frame was marked faulty in the loop, so move on to the next frame 
+                continue
+            
             if(previous_frame_faulty and (num_previous_faulty_frames > fill_in_cutoff)): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
@@ -216,7 +233,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 data[index][1] = np.concatenate([data[index][1], np.array([pose_angles_3d])], axis=0)
                 data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
                 data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
-    
+                
     """
     Remove too-short clips
     """
@@ -254,8 +271,8 @@ The main issues it identifies are:
      -Jumps from the head hanging out in one position to hanging out in another, likely caused by a camera angle change.
      In this case in splits the clip.
 """
-z_score_cutoff_head = 1.75 #The z-score cutoff to determine which haed position changes are large enough jumps to be anomalies
-z_score_cutoff_size = 1 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
+z_score_cutoff_head = 3 #The z-score cutoff to determine which haed position changes are large enough jumps to be anomalies
+z_score_cutoff_size = 3 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
 def process_clip(data, fill_in_cutoff):
     """
     First find gap indicators from the head suddenly changing position.
@@ -338,7 +355,7 @@ def process_clip(data, fill_in_cutoff):
             
                 
     gap_indicators.append(len(head_gaps))# Mark final gap 
-
+    
 
     """
     Now that we have identified the frames with gaps we can identify whether it is a brief change in position or
@@ -936,7 +953,17 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
                 if keyword in video:
                     bother_with_video=True
                 
+
             to_check = action_output_directory + "/" + video
+            
+            """
+            This bit of code is usefuk to uncomment if you are redoing data collection and you want to make sure clips that are known
+            to not make it past filters are discarded, run it over the old data.
+            
+            if(not os.path.exists((to_check + "_clip_0/pointcloud.npy"))):
+                add_to_covered_list(to_check)
+                
+            """
             if(os.path.exists((to_check + "_clip_0/pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
                 skip_occured = True
                 skips = skips + 1
@@ -944,6 +971,7 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
         
             if(skip_occured):
                 print("Skipped " + str(skips) + " times to " + video)
+                print(("Covered " + str(videos_covered) + " videos, " + str(clips_saved) + " clips saved."), end='\r')
                 skips = 0
                 skip_occured = False
 
@@ -977,7 +1005,7 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
                     clips_saved += 1
                 videos_covered += 1
             add_to_covered_list(to_check)
-                        
+            
         print(action + " done...")
 
     print("Processing complete!")
