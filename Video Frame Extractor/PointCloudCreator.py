@@ -1,5 +1,6 @@
 #Conda environment VideoFrameExtractor
 from os import replace
+from re import A
 import cv2
 import numpy as np
 import math
@@ -777,7 +778,9 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
 
 
 """
-From 3d skeleton pixelspace data, get 3d angles for a frame as follows:
+From 3d skeleton pixelspace data, get 3d angles for the joints.
+
+In the mujoco simulation the angles are as follows:
 Torso-Head connection
     -torso_x
     -torso_y
@@ -808,15 +811,37 @@ Torso-Left_Bicep connection
     -left_shoulder2 (forward/back, swinging arms)
 Left_Bicep-Left_Forearm connection
     -left_elbow
-
 Not going to actually use these angles, doing quaternion of vector change. (I.E change from head-middle shoulder vector to
-middle shoulder-abdomen vector, continuing down a chain like this.)    
+middle shoulder-abdomen vector, continuing down a chain like this.). Up vectors for the quaternions are defined in segments as follows 
+(easier to read version of this same definition is in discord channel).:
+
+
+
+Definition of forward: line from the "head" position (the one we custom calculate, the last keypoint) to the mouth position. 
+
+Up vectors are divided into 4 limb sections and 2 torso sections: 
+Chest area: Up vector for shoulder lines and mid-shoulder to abdomen line: 
+Cross product of shoulder-shoulder line and midshoulder-abdomen line, flipped to point closer to forward vector.
+
+Hip area: Up vector for the hip lines and the abdomen-midhip line: 
+Cross product of the abdomen-midhip line and the hip-hip line, flipped to point closer to the chest area up vector.
+
+Limb sections:
+Elbow area: The up vector is calculated to point away from the shortest angle between the bicep and forearm.
+
+Knee area: The up vector is calculated to point away from the shorest angle between the thigh and the calf. 
+
 """
 def get_3d_angles(keypoints_3d):
    
     """
     The first list value is the initial point, the second value is the midpoint, 
-    the final value is the final point for junctions.
+    the third value is the final point for junctions.
+    
+    The fourth value is the up_vector category it is in:
+    0: chest category
+    1: hip category
+    2:
     """
     connected_pairs = [[17,8,14], [17,8,11], [17,8,7], [8,7,0], [8,14,15], [8,11,12], [14,15,16], [11,12,13], [1,2,3], [4,5,6], 
                        [0,1,2],[0,4,5],[7,0,1],[7,0,4]]
@@ -847,6 +872,136 @@ def quaternion_from_vectors(initial, final):
     quaternion = quaternion/np.sqrt(np.sum(np.square(quaternion))) #Make sure it is a unit quaternion.
     #print(quaternion)
     return quaternion
+
+"""
+based on 
+https://discussions.unity.com/t/what-is-the-source-code-of-quaternion-lookrotation/72474
+https://pastebin.com/ubATCxJY
+"""
+def orientation_quaternion(forward_vector, up_vector):
+    """
+    Make the up vector perpendicular to the forward vector
+      -First get cross product of the up vector and the forward vector (upxforward)
+      -Then get cross product of the forward vector and the newfound vector (forwardxnewfound)
+      
+    Used this to brainstorm: https://www.geogebra.org/m/d6n6rk9N
+    """
+    #Normalize forward vector
+    forward_vector = forward_vector/np.sqrt(np.dot(forward_vector,forward_vector))
+    #Calculate side vector
+    side_vector = np.cross(up_vector,forward_vector)
+    #Normalize side vector
+    side_vector = side_vector/np.sqrt(np.dot(side_vector,side_vector))
+    #Re-Calculate up vector to ensure perpendicular and normalize at the same time.
+    up_vector = np.cross(forward_vector,side_vector)
+    
+    
+    """
+    Get the orientation vector from the forward and up vector
+    
+    please forgive the horrendusly named variables as this is modified code from a the unity forum, only really modified
+    so that it is python instead of C# in terms of function it is pretty much the same.
+    """
+    m00 = side_vector[0];
+    m01 = side_vector[1]
+    m02 = side_vector[2]
+    m10 = up_vector[0]
+    m11 = up_vector[1]
+    m12 = up_vector[2]
+    m20 = forward_vector[0]
+    m21 = forward_vector[1]
+    m22 = forward_vector[2]
+
+    num8 = (m00 + m11) + m22
+    
+    if (num8 > 0):
+        num = (num8 + 1)**0.5;
+        w = num * 0.5;
+        num = 0.5 / num;
+        x = (m12 - m21) * num;
+        y = (m20 - m02) * num;
+        z = (m01 - m10) * num;
+        return np.array([x,y,z,w])
+    elif ((m00 >= m11) and (m00 >= m22)):
+        num7 = (((1 + m00) - m11) - m22)**2;
+        num4 = 0.5 / num7;
+        x = 0.5 * num7;
+        y = (m01 + m10) * num4;
+        z = (m02 + m20) * num4;
+        w = (m12 - m21) * num4;
+        return np.array([x,y,z,w])
+    elif (m11 > m22):
+        num6 = (((1 + m11) - m00) - m22)**2;
+        num3 = 0.5 / num6;
+        x = (m10+ m01) * num3;
+        y = 0.5 * num6;
+        z = (m21 + m12) * num3;
+        w = (m20 - m02) * num3;
+        return np.array([x,y,z,w]) 
+    else:
+        num5 = (((1 + m22) - m00) - m11)**2;
+        num2 = 0.5 / num5;
+        x = (m20 + m02) * num2;
+        y = (m21 + m12) * num2;
+        z = 0.5 * num5;
+        w = (m01 - m10) * num2;
+        return np.array([x,y,z,w]) 
+    
+
+"""
+based on 
+Transfer quaternion
+https://stackoverflow.com/questions/8781129/when-i-have-two-orientation-quaternions-how-do-i-find-the-rotation-quaternion-n
+https://discussions.unity.com/t/shortest-rotation-between-two-quaternions/773111
+"""
+def quaternion_between_quaternions(start, end):
+    if(np.dot(start,end) < 0):
+        quaternion_b = end
+        quaternion_b[3] = -quaternion_b[3]
+        return quaternion_multiply(start,quaternion_b)
+    else:
+        quaternion_b = end*-1
+        quaternion_b[3] = -quaternion_b[3]
+        return quaternion_multiply(start,quaternion_b)
+    
+"""
+Taken from https://automaticaddison.com/how-to-multiply-two-quaternions-together-using-python/
+"""
+def quaternion_multiply(Q0,Q1):
+    """
+    Multiplies two quaternions.
+ 
+    Input
+    :param Q0: A 4 element array containing the first quaternion (q01,q11,q21,q31) 
+    :param Q1: A 4 element array containing the second quaternion (q02,q12,q22,q32) 
+ 
+    Output
+    :return: A 4 element array containing the final quaternion (q03,q13,q23,q33) 
+ 
+    """
+    # Extract the values from Q0
+    w0 = Q0[0]
+    x0 = Q0[1]
+    y0 = Q0[2]
+    z0 = Q0[3]
+     
+    # Extract the values from Q1
+    w1 = Q1[0]
+    x1 = Q1[1]
+    y1 = Q1[2]
+    z1 = Q1[3]
+     
+    # Computer the product of the two quaternions, term by term
+    Q0Q1_w = w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1
+    Q0Q1_x = w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1
+    Q0Q1_y = w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1
+    Q0Q1_z = w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1
+     
+    # Create a 4 element array containing the final quaternion
+    final_quaternion = np.array([Q0Q1_w, Q0Q1_x, Q0Q1_y, Q0Q1_z])
+     
+    # Return a 4 element array containing the final quaternion (q02,q12,q22,q32) 
+    return final_quaternion
 
 """
 Given a pointcloud and 3d pixelspace pose data, shift all points
