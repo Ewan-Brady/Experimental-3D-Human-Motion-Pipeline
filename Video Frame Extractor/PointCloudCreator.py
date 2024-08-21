@@ -906,9 +906,13 @@ def get_3d_angles(keypoints_3d):
 
     quaternion_angles = []
     
-    #First append absolute head quaternion as a baseline that others extend off of.
-    down_the_neck = keypoints_3d[8]-keypoints_3d[17] #goes from the head position to the midshoulder
-    quaternion_angles.append(orientation_quaternion(down_the_neck,forward_vector))
+    #First append absolute head quaternion orientation in space
+    upward_vector = keypoints_3d[17]-keypoints_3d[8] #goes from the the midshoulder to the head
+    #Upward vector is made perpendicular in the function, causing it to go straught up
+    quaternion_angles.append(orientation_quaternion(forward_vector,upward_vector))
+
+    #Second append the quaternion of the head/midshoulder, as it is the baseline that the other quaternions extend off of.
+    quaternion_angles.append(orientation_quaternion(-upward_vector,forward_vector))
     
     #Then get the other rotations.
     for i in connected_pairs:
