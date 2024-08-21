@@ -1,11 +1,13 @@
 #Conda environment VideoFrameExtractor
 from os import replace
 from re import A
+from turtle import forward
 import cv2
 import numpy as np
 import math
 import os
 import sys
+from scipy.spatial.transform import Rotation as R
 
 depth_multiplier = 2 #Can be any number, set it to two as I think it makes pointclouds look better/more accurate
 FOV = 53 * math.pi/180
@@ -847,12 +849,12 @@ def get_3d_angles(keypoints_3d):
     #calculate the chest up vector from shoulder-shoulderxmidshoulder-abdmomen
     shoulder_shoulder_line = keypoints_3d[14]-keypoints_3d[11] #Right shoulder minus left shoulder
     midshoulder_abdomen_line = keypoints_3d[7]-keypoints_3d[8] #Abdomen minus midshoulder
-    chest_up_vector = np.cross(shoulder_shoulder_line,midshoulder_abdomen_line)
+    chest_up_vector = -np.cross(shoulder_shoulder_line,midshoulder_abdomen_line)
     
     #calculate the hip up vector from 
     hip_hip_line = keypoints_3d[1]-keypoints_3d[4] #Right hip minus left hip
     abdomen_midhip_line = keypoints_3d[0]-keypoints_3d[7] #midhip minus abdomen
-    hip_up_vector = np.cross(hip_hip_line,abdomen_midhip_line)
+    hip_up_vector = -np.cross(hip_hip_line,abdomen_midhip_line)
     
     #Use this function to calculate upper limbs (knees or biceps)
     def upperlimb_up_vector_calc(hip_or_chest_up_vector,hand_or_foot,knee_or_elbow,hip_or_shoulder):
@@ -903,13 +905,20 @@ def get_3d_angles(keypoints_3d):
                        [7,0,1,hip_up_vector,hip_up_vector], [7,0,4,hip_up_vector,hip_up_vector]]
 
     quaternion_angles = []
+    
+    #First append absolute head quaternion as a baseline that others extend off of.
+    down_the_neck = keypoints_3d[8]-keypoints_3d[17] #goes from the head position to the midshoulder
+    quaternion_angles.append(orientation_quaternion(down_the_neck,forward_vector))
+    
+    #Then get the other rotations.
     for i in connected_pairs:
         initial_forward = keypoints_3d[i[1]] - keypoints_3d[i[0]] #Get forward vectors
         final_forward = keypoints_3d[i[2]] - keypoints_3d[i[1]]
         
-        initial_quaternion = orientation_quaternion(initial_forward,connected_pairs[3]) #Get orientation quaternions
-        final_quaternion = orientation_quaternion(final_forward,connected_pairs[4])
+        initial_quaternion = orientation_quaternion(initial_forward,i[3]) #Get orientation quaternions
+        final_quaternion = orientation_quaternion(final_forward,i[4])
         
+        #quaternion_angles.append(final_quaternion)
         quaternion_angles.append(quaternion_between_quaternions(initial_quaternion,final_quaternion)) #Append quaternion to go from one to the other
         
     quaternion_angles = np.stack(quaternion_angles)
@@ -931,22 +940,18 @@ def quaternion_from_vectors(initial, final):
     quaternion = np.concatenate([crossproduct,w]) #Forms a quaternion xyzw.
     
     quaternion = quaternion/np.sqrt(np.sum(np.square(quaternion))) #Make sure it is a unit quaternion.
-    #print(quaternion)
     return quaternion
 
 """
-based on 
-https://discussions.unity.com/t/what-is-the-source-code-of-quaternion-lookrotation/72474
-https://pastebin.com/ubATCxJY
+Use a rotation matrix approach.
+
+forward, up, can get side as a cross product, are then able to form a rotation matrix.
+
+we then convert this rotation matrix into a quaternion using scipy
 """
 def orientation_quaternion(forward_vector, up_vector):
-    """
-    Make the up vector perpendicular to the forward vector
-      -First get cross product of the up vector and the forward vector (upxforward)
-      -Then get cross product of the forward vector and the newfound vector (forwardxnewfound)
-      
-    Used this to brainstorm: https://www.geogebra.org/m/d6n6rk9N
-    """
+    #Used this to brainstorm cross product stuff https://www.geogebra.org/m/d6n6rk9N
+    
     #Normalize forward vector
     forward_vector = forward_vector/np.sqrt(np.dot(forward_vector,forward_vector))
     #Calculate side vector
@@ -956,113 +961,21 @@ def orientation_quaternion(forward_vector, up_vector):
     #Re-Calculate up vector to ensure perpendicular and normalize at the same time.
     up_vector = np.cross(forward_vector,side_vector)
     
-    
-    """
-    Get the orientation vector from the forward and up vector
-    
-    please forgive the horrendusly named variables as this is modified code from a the unity forum, only really modified
-    so that it is python instead of C# in terms of function it is pretty much the same.
-    """
-    m00 = side_vector[0];
-    m01 = side_vector[1]
-    m02 = side_vector[2]
-    m10 = up_vector[0]
-    m11 = up_vector[1]
-    m12 = up_vector[2]
-    m20 = forward_vector[0]
-    m21 = forward_vector[1]
-    m22 = forward_vector[2]
+    m = np.stack([side_vector,up_vector,forward_vector]) #this gets each vector as a row
+    m = np.transpose(m) #this gets each vector as a column
+    r = R.from_matrix(m)
 
-    num8 = (m00 + m11) + m22
+    return r.as_quat()
     
-    if (num8 > 0):
-        num = (num8 + 1)**0.5;
-        w = num * 0.5;
-        num = 0.5 / num;
-        x = (m12 - m21) * num;
-        y = (m20 - m02) * num;
-        z = (m01 - m10) * num;
-        return np.array([x,y,z,w])
-    elif ((m00 >= m11) and (m00 >= m22)):
-        num7 = (((1 + m00) - m11) - m22)**2;
-        num4 = 0.5 / num7;
-        x = 0.5 * num7;
-        y = (m01 + m10) * num4;
-        z = (m02 + m20) * num4;
-        w = (m12 - m21) * num4;
-        return np.array([x,y,z,w])
-    elif (m11 > m22):
-        num6 = (((1 + m11) - m00) - m22)**2;
-        num3 = 0.5 / num6;
-        x = (m10+ m01) * num3;
-        y = 0.5 * num6;
-        z = (m21 + m12) * num3;
-        w = (m20 - m02) * num3;
-        return np.array([x,y,z,w]) 
-    else:
-        num5 = (((1 + m22) - m00) - m11)**2;
-        num2 = 0.5 / num5;
-        x = (m20 + m02) * num2;
-        y = (m21 + m12) * num2;
-        z = 0.5 * num5;
-        w = (m01 - m10) * num2;
-        return np.array([x,y,z,w]) 
-    
-
 """
-based on 
-Transfer quaternion
-https://stackoverflow.com/questions/8781129/when-i-have-two-orientation-quaternions-how-do-i-find-the-rotation-quaternion-n
-https://discussions.unity.com/t/shortest-rotation-between-two-quaternions/773111
+Convert to rotation matrices, get rotation in between, turn back into a quaternion.
 """
 def quaternion_between_quaternions(start, end):
-    if(np.dot(start,end) < 0):
-        quaternion_b = end
-        quaternion_b[3] = -quaternion_b[3]
-        return quaternion_multiply(start,quaternion_b)
-    else:
-        quaternion_b = end*-1
-        quaternion_b[3] = -quaternion_b[3]
-        return quaternion_multiply(start,quaternion_b)
-    
-"""
-Taken from https://automaticaddison.com/how-to-multiply-two-quaternions-together-using-python/
-"""
-def quaternion_multiply(Q0,Q1):
-    """
-    Multiplies two quaternions.
- 
-    Input
-    :param Q0: A 4 element array containing the first quaternion (q01,q11,q21,q31) 
-    :param Q1: A 4 element array containing the second quaternion (q02,q12,q22,q32) 
- 
-    Output
-    :return: A 4 element array containing the final quaternion (q03,q13,q23,q33) 
- 
-    """
-    # Extract the values from Q0
-    w0 = Q0[0]
-    x0 = Q0[1]
-    y0 = Q0[2]
-    z0 = Q0[3]
-     
-    # Extract the values from Q1
-    w1 = Q1[0]
-    x1 = Q1[1]
-    y1 = Q1[2]
-    z1 = Q1[3]
-     
-    # Computer the product of the two quaternions, term by term
-    Q0Q1_w = w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1
-    Q0Q1_x = w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1
-    Q0Q1_y = w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1
-    Q0Q1_z = w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1
-     
-    # Create a 4 element array containing the final quaternion
-    final_quaternion = np.array([Q0Q1_w, Q0Q1_x, Q0Q1_y, Q0Q1_z])
-     
-    # Return a 4 element array containing the final quaternion (q02,q12,q22,q32) 
-    return final_quaternion
+    start = R.from_quat(start)
+    end = R.from_quat(end)
+    start_undone = start.inv()
+    between_matrix = np.matmul(end.as_matrix(),start_undone.as_matrix())
+    return R.from_matrix(between_matrix).as_quat()   
 
 """
 Given a pointcloud and 3d pixelspace pose data, shift all points
