@@ -723,13 +723,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     the eyes (10), then making that vector the same length as the vector to the mouth, before finally adding
     this vector to the middle shoulder point (8)
     """
-    
-    """
-    Stack found pixelspace 3d points and spread.
-    
-    Also make some alterations to the z points post-spread to make them better match the pre-spread pose.
-    """
-    
     direction_vector = pixelspace_points_3d[10]-pixelspace_points_3d[9] #get direction vector
     magnitude_vector = pixelspace_points_3d[9]-pixelspace_points_3d[8] #Use this to get desired magnitude
     unit_vector = direction_vector/np.sqrt(np.sum(np.square(direction_vector))) #get unit vector of direction vector
@@ -738,6 +731,12 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     
     pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
 
+    """
+    Stack found pixelspace 3d points and spread.
+    
+    Also make some alterations to the z points post-spread to make them better match the pre-spread pose.
+    """
+   
     z_dividedby_xy_ratios = [] 
     for i in pixelspace_points_3d:
         for i2 in pixelspace_points_3d:
@@ -821,9 +820,9 @@ Definition of forward: line from the "head" position (the one we custom calculat
 
 Up vectors are divided into 4 limb sections and 2 torso sections: 
 Chest area: Up vector for shoulder lines and mid-shoulder to abdomen line: 
-Cross product of shoulder-shoulder line and midshoulder-abdomen line, flipped to point closer to forward vector.
+Cross product of leftshoulder-rightshoulder line and midshoulder-abdomen line.
 
-Hip area: Up vector for the hip lines and the abdomen-midhip line: 
+Hip area: Up vector for the lefthip-righthip line and the abdomen-midhip line: 
 Cross product of the abdomen-midhip line and the hip-hip line, flipped to point closer to the chest area up vector.
 
 Limb sections:
@@ -838,13 +837,39 @@ def get_3d_angles(keypoints_3d):
     The first list value is the initial point, the second value is the midpoint, 
     the third value is the final point for junctions.
     
-    The fourth value is the up_vector category it is in:
-    0: chest category
-    1: hip category
-    2:
+    The fourth value is the up_vector category that the initial and final segment are in respectivly:
+    0: initial head forward vector (forward_vector)
+    1: chest category (chest_up_vector)
+    2: hip category (hip_up_vector)
+    3: left knee
+    4: right knee 
+    5: left arm
+    6: right arm
+    
+    3: limb category (calculation universal regardless of limb, but done depending on the limb using connected_pairs)
+              -up vector is calculated from 
     """
-    connected_pairs = [[17,8,14], [17,8,11], [17,8,7], [8,7,0], [8,14,15], [8,11,12], [14,15,16], [11,12,13], [1,2,3], [4,5,6], 
-                       [0,1,2],[0,4,5],[7,0,1],[7,0,4]]
+    connected_pairs = [[17,8,14,0,1], [17,8,11,0,1], [17,8,7,0,1], [8,7,0,1,2], [8,14,15,1,3], [8,11,12,1,3], [14,15,16,3,3], 
+                       [11,12,13,3,3], [1,2,3,3,3], [4,5,6,3,3], [0,1,2,2,3], [0,4,5,2,3], [7,0,1,2,2], [7,0,4,2,2]]
+    
+    #calculate forward vector from averaging out vector to eyes and vector to mouth 
+    forward_vector_1 = keypoints_3d[9]-keypoints_3d[17] #Tip-tail, mouth-head
+    forward_vector_2 = keypoints_3d[10]-keypoints_3d[17] #Tip-tail, eyes-head
+    forward_vector = forward_vector_1+forward_vector_2
+    forward_vector = forward_vector/np.sqrt(np.dot(forward_vector,forward_vector))
+    
+    #calculate the chest up vector from shoulder-shoulderxmidshoulder-abdmomen
+    shoulder_shoulder_line = keypoints_3d[14]-keypoints_3d[11] #Right shoulder minus left shoulder
+    midshoulder_abdomen_line = keypoints_3d[7]-keypoints_3d[8] #Abdomen minus midshoulder
+    chest_up_vector = np.cross(shoulder_shoulder_line,midshoulder_abdomen_line)
+    
+    #calculate the hip up vector from 
+    hip_hip_line = keypoints_3d[1]-keypoints_3d[4] #Right hip minus left hip
+    abdomen_midhip_line = keypoints_3d[0]-keypoints_3d[7] #midhip minus abdomen
+    hip_up_vector = np.cross(hip_hip_line,abdomen_midhip_line)
+    
+
+
     quaternion_angles = []
     for i in connected_pairs:
         initial = keypoints_3d[i[1]] - keypoints_3d[i[0]]
