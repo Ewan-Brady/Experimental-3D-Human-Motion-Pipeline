@@ -818,40 +818,26 @@ middle shoulder-abdomen vector, continuing down a chain like this.). Up vectors 
 
 Definition of forward: line from the "head" position (the one we custom calculate, the last keypoint) to the mouth position. 
 
-Up vectors are divided into 4 limb sections and 2 torso sections: 
-Chest area: Up vector for shoulder lines and mid-shoulder to abdomen line: 
-Cross product of leftshoulder-rightshoulder line and midshoulder-abdomen line.
+Up vectors are divided into 4 limb sections and 2 torso sections.
 
-Hip area: Up vector for the lefthip-righthip line and the abdomen-midhip line: 
-Cross product of the abdomen-midhip line and the hip-hip line, flipped to point closer to the chest area up vector.
+Chest area: Up vector for shoulder lines and mid-shoulder to abdomen line: Cross product of shoulder-shoulder line and midshoulder-abdomen line, flipped to point closer to forward vector.
+
+Hip area: Up vector for the hip lines and the abdomen-midhip line are defined by the cross product of the abdomen-midhip line and the hip-hip line, flipped to point closer to the chest area up vector.
+
 
 Limb sections:
-Elbow area: The up vector is calculated to point away from the shortest angle between the bicep and forearm.
+Elbow area: 
+     -The up vector for the bicep is calculated from the bicep vector minus the forearm vector, then made perpendicular to the bicep vector, before being flipped closer to the chest orientation if nessecary
+     -The up vector for the forearm is calculated from: first take bicep_upxbicep_forward=bicep_sideways, then take take forearm_forwardxbicep_sideways to get forearm_up
 
-Knee area: The up vector is calculated to point away from the shorest angle between the thigh and the calf. 
+Knee area: 
+     -The up vector for the thigh is calculated from the thigh vector minus the calf vector, then made perpendicular to the thigh vector, before being flipped to be closer to the hip orientation if nessecary. 
+     -The up vector for the calf is calculated from: first take thigh_upxthigh_forward=thigh_sideways, then take take calf_forwardxthigh_sideways to get calf_up 
 
+     
+Note that the knee and bicep calculations rely on the assumption that the upper part of the bicep and knee cannot face backwards
 """
 def get_3d_angles(keypoints_3d):
-   
-    """
-    The first list value is the initial point, the second value is the midpoint, 
-    the third value is the final point for junctions.
-    
-    The fourth value is the up_vector category that the initial and final segment are in respectivly:
-    0: initial head forward vector (forward_vector)
-    1: chest category (chest_up_vector)
-    2: hip category (hip_up_vector)
-    3: left knee
-    4: right knee 
-    5: left arm
-    6: right arm
-    
-    3: limb category (calculation universal regardless of limb, but done depending on the limb using connected_pairs)
-              -up vector is calculated from 
-    """
-    connected_pairs = [[17,8,14,0,1], [17,8,11,0,1], [17,8,7,0,1], [8,7,0,1,2], [8,14,15,1,3], [8,11,12,1,3], [14,15,16,3,3], 
-                       [11,12,13,3,3], [1,2,3,3,3], [4,5,6,3,3], [0,1,2,2,3], [0,4,5,2,3], [7,0,1,2,2], [7,0,4,2,2]]
-    
     #calculate forward vector from averaging out vector to eyes and vector to mouth 
     forward_vector_1 = keypoints_3d[9]-keypoints_3d[17] #Tip-tail, mouth-head
     forward_vector_2 = keypoints_3d[10]-keypoints_3d[17] #Tip-tail, eyes-head
@@ -868,14 +854,64 @@ def get_3d_angles(keypoints_3d):
     abdomen_midhip_line = keypoints_3d[0]-keypoints_3d[7] #midhip minus abdomen
     hip_up_vector = np.cross(hip_hip_line,abdomen_midhip_line)
     
+    #Use this function to calculate upper limbs (knees or biceps)
+    def upperlimb_up_vector_calc(hip_or_chest_up_vector,hand_or_foot,knee_or_elbow,hip_or_shoulder):
+        upper_limb_vector = knee_or_elbow-hip_or_shoulder #knee/eblow minus hip/shoulder (tip minus tail)
+        forelimb_vector = hand_or_foot-knee_or_elbow #foot/hand minus knee/elbow (tip minus tail)
+        upper_limb_up_vector = upper_limb_vector-forelimb_vector
+        
+        #If flipped vector is more similar to hip/chest use it
+        if np.dot(upper_limb_up_vector,hip_or_chest_up_vector) < np.dot(-upper_limb_up_vector,hip_or_chest_up_vector): 
+            upper_limb_up_vector = -upper_limb_up_vector
+            
+        return upper_limb_up_vector
+    
+    #Call upperlimb function to calculate upper limbs (knees and biceps)
+    left_bicep_vector = upperlimb_up_vector_calc(chest_up_vector,keypoints_3d[13],keypoints_3d[12],keypoints_3d[11])
+    right_bicep_vector = upperlimb_up_vector_calc(chest_up_vector,keypoints_3d[16],keypoints_3d[15],keypoints_3d[14])
+    left_thigh_vector = upperlimb_up_vector_calc(hip_up_vector,keypoints_3d[6],keypoints_3d[5],keypoints_3d[4])
+    right_thigh_vector = upperlimb_up_vector_calc(hip_up_vector,keypoints_3d[3],keypoints_3d[2],keypoints_3d[1])
+    
 
+    #Use this function to calculate lower limb up vectors (calf and forearm)
+    def lower_limb_up_vector_calc(upper_limb_up_vector, hand_or_foot, elbow_or_knee, shoulder_or_hip):
+        upper_limb_forward_vector = elbow_or_knee - shoulder_or_hip #Knee/elbow minus hip/shoulder (tip-tail)
+        side_vector = np.cross(upper_limb_up_vector, upper_limb_forward_vector)
+        lower_limb_forward_vector = hand_or_foot - elbow_or_knee #Hand/foot minus elbow/knee
+        lower_limb_up_vector = np.cross(lower_limb_forward_vector,side_vector)
+
+        return lower_limb_up_vector
+    
+    #Use function to calculate lower limb up vectors (forearm and calf)
+    left_forearm_vector = lower_limb_up_vector_calc(left_bicep_vector,keypoints_3d[13],keypoints_3d[12],keypoints_3d[11])
+    right_forearm_vector = lower_limb_up_vector_calc(right_bicep_vector,keypoints_3d[16],keypoints_3d[15],keypoints_3d[14]) 
+    left_calf_vector = lower_limb_up_vector_calc(left_thigh_vector,keypoints_3d[6],keypoints_3d[5],keypoints_3d[4])
+    right_calf_vector = lower_limb_up_vector_calc(right_thigh_vector,keypoints_3d[3],keypoints_3d[2],keypoints_3d[1])
+
+    """
+    The first list value is the initial point, the second value is the midpoint, 
+    the third value is the final point for junctions.
+    
+    The fourth and fifth value is the initial and final up vector respectivly:
+    """
+    connected_pairs = [[17,8,14,forward_vector,chest_up_vector], [17,8,11,forward_vector,chest_up_vector], 
+                       [17,8,7,forward_vector,chest_up_vector], [8,7,0,chest_up_vector,hip_up_vector], 
+                       [8,14,15,chest_up_vector,right_bicep_vector], [8,11,12,chest_up_vector,left_bicep_vector], 
+                       [14,15,16,right_bicep_vector,right_forearm_vector], [11,12,13,left_bicep_vector,left_forearm_vector], 
+                       [1,2,3,right_thigh_vector,right_calf_vector], [4,5,6,left_thigh_vector,left_calf_vector], 
+                       [0,1,2,hip_up_vector,right_thigh_vector], [0,4,5,hip_up_vector,left_thigh_vector], 
+                       [7,0,1,hip_up_vector,hip_up_vector], [7,0,4,hip_up_vector,hip_up_vector]]
 
     quaternion_angles = []
     for i in connected_pairs:
-        initial = keypoints_3d[i[1]] - keypoints_3d[i[0]]
-        final = keypoints_3d[i[2]] - keypoints_3d[i[1]]
-        quaternion_angles.append(quaternion_from_vectors(initial, final))
-    
+        initial_forward = keypoints_3d[i[1]] - keypoints_3d[i[0]] #Get forward vectors
+        final_forward = keypoints_3d[i[2]] - keypoints_3d[i[1]]
+        
+        initial_quaternion = orientation_quaternion(initial_forward,connected_pairs[3]) #Get orientation quaternions
+        final_quaternion = orientation_quaternion(final_forward,connected_pairs[4])
+        
+        quaternion_angles.append(quaternion_between_quaternions(initial_quaternion,final_quaternion)) #Append quaternion to go from one to the other
+        
     quaternion_angles = np.stack(quaternion_angles)
 
     return quaternion_angles
