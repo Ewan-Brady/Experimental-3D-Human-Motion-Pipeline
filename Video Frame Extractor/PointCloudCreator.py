@@ -8,6 +8,7 @@ import math
 import os
 import sys
 from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp
 
 depth_multiplier = 2 #Can be any number, set it to two as I think it makes pointclouds look better/more accurate
 FOV = 53 * math.pi/180
@@ -191,7 +192,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         else:
             pose_points_3d, pose_angles_3d, point_cloud, head_pos = pose_extract_3d(skeleton_frames_2d[i2], skeleton_frames_3d[i2],
                                                                       depth_frames[i2], point_clouds[i2]) #Process frame
-            
+            head_angle = pose_angles_3d[0]
             """
             Before adding it to the data, Check by depth, if any pose point is below the mean depth it is probally in the background.
             If it is in the background the frame is faulty and is discarded.
@@ -220,13 +221,15 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
             current_frame_faulty = odd_joints_check(pose_angles_3d)
             if current_frame_faulty:
                 previous_frame_faulty = True
+                num_previous_faulty_frames += 1
                 continue
 
             if(previous_frame_faulty and (num_previous_faulty_frames > fill_in_cutoff)): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
                              np.array([point_cloud]),
-                             np.array([head_pos])])
+                             np.array([head_pos]),
+                             np.array([head_angle])])
                 num_previous_faulty_frames = 0
                 previous_frame_faulty=False
             elif(previous_frame_faulty): #A small enough amount of previous frames were marked faulty to do a fill-in
@@ -242,6 +245,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                     data[index][1] = np.concatenate([data[index][1], np.array([pose_angles_3d])], axis=0)
                     data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
                     data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
+                    data[index][4] = np.concatenate([data[index][4], np.array([head_angle])], axis=0)
                 fill_in_frames(data[index],(len(data[index])-2-num_previous_faulty_frames),(len(data[index])-1)) #Fill in faulty frames
                 num_previous_faulty_frames = 0
                 previous_frame_faulty=False
@@ -251,7 +255,8 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 data[index][1] = np.concatenate([data[index][1], np.array([pose_angles_3d])], axis=0)
                 data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
                 data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
-                
+                data[index][4] = np.concatenate([data[index][4], np.array([head_angle])], axis=0)
+
     """
     Remove too-short clips
     """
@@ -299,6 +304,7 @@ def odd_joints_check(pose_quaternions):
 rotates processed pose_points_3d, pointcloud, and head angles of pose_angles_3d about the head orientation, while
 still keeping absolute up vector.
 """
+absolute_upward_vector = np.array([0,1,0]) #used in slerp function as well, Just points straight up relative to coordanate system.
 def rotate_about_head(pose_points_3d, pointcloud, head_angles):
     #calculate forward vector from averaging out vector to eyes and vector to mouth 
     forward_vector_1 = pose_points_3d[9]-pose_points_3d[17] #Tip-tail, mouth-head
@@ -307,10 +313,8 @@ def rotate_about_head(pose_points_3d, pointcloud, head_angles):
     forward_vector[1] = 0 #remove vertical component
     forward_vector = forward_vector/np.sqrt(np.dot(forward_vector,forward_vector))
 
-    #Calculate upward vector and make quaternion    
-    upward_vector = np.array([0,1,0])#Just points straight up relative to coordanate system. #pose_points_3d[17]-pose_points_3d[8] #goes from the the midshoulder to the head
     #Upward vector is made perpendicular in the function, causing it to go straight up
-    head_rotation = (R.from_quat(orientation_quaternion(forward_vector,upward_vector))).inv()
+    head_rotation = (R.from_quat(orientation_quaternion(forward_vector,absolute_upward_vector))).inv()
     head_rotation_matrix = head_rotation.as_matrix()
 
     for i in range(len(head_angles)):
@@ -550,11 +554,10 @@ def process_clip(data, fill_in_cutoff):
     return to_return
 
 """
-In a given clip, attempts to extrapolate the start and end frames (exclusive, I.E. the frames in between start and end),
-assuming the frames in between are corrupted in some way and are not to be used so need to be filled-in by estimations.` 
+In a given clip, fills inbetween two frames (exclusive, I.E. the frames in between start and end),
+assuming the frames in between are corrupted in some way and are not to be used so need to be filled-in by estimations.
+It can only fill in a max of two frames.
 
-In the future we may implement a more advanced system which anaylzes the change in quaternions overtime to then determine 
-the changes in 3D pose point positions overtime, but for now we are just replacing it with the previous and next frame
 """
 def fill_in_frames(clip, start, end):
     if(end-start > 3):
@@ -568,6 +571,147 @@ def fill_in_frames(clip, start, end):
             clip[i][(end-1)] = clip[i][(end)] #Replace second frame with following frame if second frame is to be replaced.
 
     return clip
+
+"""
+Extrapolates intermediate frames by quaternion angle changes found by slerp
+
+Process:
+     -Quaternion angles are varied overtime by quaternion slerp, initial position is start, final position is end, and inbetween
+      angles are extrapolated by slerp.
+     -Point positions are extrapolated as follows
+           -The head position is always 0,0,0 so we just keep it that way
+           -A slope for change in distance per frame between each limb/segment is found by the distance in the initial and final frame
+           divided by the frame gap (rise over run)
+           -The vector direction for each limb/segment is found by the quaternions for the limb segments (chain system similar to the 
+           visualizor.)
+           -Using the limb segment vector direction and magnitude for each frame, along with the head position for that frame, the new
+           positions for each point are found for that frame.
+     -Pointcloud is extrapolated as follows:
+           -The colour of each point is either the same as that of the initial or final frame, depending on which is closer
+           -The location of the point is oriented to the new quaternion.
+
+"""
+def fill_in_slerp(clip, start, end):
+    if(end-start <= 1):
+        raise Exception("Must be at least one frame to fill in.")
+    
+    pose_points_3d_list = clip[0]
+    pose_angles_3d_list = clip[1]
+    point_clouds_list = clip[2]
+    head_angles = clip[4]
+   
+    times = range(0,end-start)
+    
+    """
+    First, extrapolate new quaternions
+    """
+    for i in range(len(pose_points_3d_list[0])): #Iterate over each quaternion that varies overtime
+        slerp = Slerp([0, end-start],[pose_points_3d_list[start],pose_points_3d_list[end]])
+            
+        intermediate_rots = slerp(times).as_quat()
+        
+        i3 = 0
+        for i2 in range((start),(end+1)):
+            #i2 tracks the current frame, i tracks the angle, i3 tracks the timestamp in slerp
+            pose_angles_3d_list[i2][i] = intermediate_rots[i3] 
+            i3 = i3+1
+    
+    """
+    Second, extrapolate new points.
+    
+    connected pairs first two elements are initial and final point, while
+    the third element and onward is the quaternion chain leading to that segment, where the final element is the segment quaternion.
+    
+    They are ordered by the number of segments down the head, so their initial segment is always calculated already before they
+    try to use it to extrapolate the final segment.
+    """
+    connected_pairs = [[17, 8, 1], #quaternion 1, direct at head
+                       [8, 14, 1, 2], #quaternion 2, one layer down from head
+                       [8, 11, 1, 3], #quaternion 3, one layer down from head
+                       [8, 7, 1, 4], #quaternion 4, one layer down from head
+                       [7, 0, 1, 4, 5], #quaternion 5, two layers down from head
+                       [14, 15, 1, 2, 6], #quaternion 6, two layers down from head
+                       [11, 12, 1, 3, 7], #quaternion 7, two layers down from head
+                       [15, 16, 1, 2, 6, 8], #quaternion 8, three layers down from head
+                       [12, 13, 1, 3, 7, 9], #quaternion 9, three layers down from head
+                       [0, 1, 1, 4, 5, 14], #quaternion 14, three layers down from head
+                       [0, 4, 1, 4, 5, 15], #quaternion 15, three layers down from head
+                       [1, 2, 1, 4, 5, 14, 12], #quaternion 12, four layers down from head
+                       [4, 5, 1, 4, 5, 15, 13], #quaternion 13, four layers down from head
+                       [5, 6, 1, 4, 5, 15, 13, 11], #quaternion 11, five layers down from head
+                       [2, 3, 1, 4, 5, 14, 12, 10]] #quaternion 10, five layers down from head
+    
+    for pair in connected_pairs:
+        initial_vector = pose_points_3d_list[start][pair[1]]-pose_points_3d_list[start][pair[0]] #Get vector between the pair at start frame
+        final_vector = pose_points_3d_list[end][pair[1]]-pose_points_3d_list[end][pair[0]] #Get vector between the pair at end frame
+        
+        initial_vector_mag = np.sqrt(np.dot(initial_vector,initial_vector)) #Get magnitude of initial vector
+        final_vector_mag = np.sqrt(np.dot(final_vector,final_vector)) #Get magnitude of final vector
+        
+        magnitude_change_overtime = (final_vector_mag-initial_vector_mag)/(end-start) #Get rate of change of magnitude.
+        
+        for i in range(start, (end+1)):
+            rotation_matrix = np.identity(3)
+            for i in range((len(pair)-1),1,-1): #Apply quaternions sucessivly as matrixes to get absolute in-space orientation
+                matrix_to_multiply = (R.from_quat(pose_angles_3d_list[i][pair[i]])).as_matrix()
+                rotation_matrix = np.matmul(matrix_to_multiply,rotation_matrix)
+            
+            rotation = R.from_matrix(rotation_matrix) #Convert absolute in-space orientation matrix to a rotation object
+            
+            magnitude = initial_vector_mag + (i-start)*magnitude_change_overtime #Calculate magntude for that frame.
+
+            vector = rotation.apply(np.array([0,0,1])) * magnitude #Rotate unit vector by found quaternion and make its length magnitude.
+            
+            pose_points_3d_list[i][pair[1]] = pose_points_3d_list[i][pair[0]] + vector #Add vector to initial point to get final point.
+
+    """
+    Finally, fill in pointclouds and quaternions pre-flattening.
+    """
+    initial_rotation = (R.from_quat(head_angles[start])) #This is the initial rotation
+    final_rotation = (R.from_quat(head_angles[end])).inv() #This is the final rotation
+    
+    head_slerp = Slerp([0, end-start], [initial_rotation, final_rotation])
+    intermediate_rots = head_slerp(times).as_quat() #generate intermediate rotations of head
+    
+    i3 = 0
+    for i in range((start+1), end):
+        if abs(start-i) < abs(end-i):
+            old_rotation = initial_rotation #Closer to initial rotation
+            
+            frame_to_target = start
+        else:
+            old_rotation = final_rotation #Closer to final rotation
+            
+            frame_to_target = end
+            
+        #Now calculate actual vector that would have been used in the head_rotation function.
+        forward_vector = np.array([0,0,1])
+        forward_vector = old_rotation.apply(forward_vector)
+        forward_vector[1] = 0
+        old_rotation_inverted = (R.from_quat(orientation_quaternion(forward_vector,absolute_upward_vector)))
+        
+        #Dont like that I have to copy here but want to make sure the initial and final frames dont get modified.
+        point_clouds_list[i,:,:3] = old_rotation_inverted.apply(np.copy(point_clouds_list[frame_to_target,:,:3])) #Undo the rotation on final or initial
+        
+
+        #Add new quaternion to angles
+        new_rotation = intermediate_rots[i3+1]
+        i3 = i3+1
+        head_angles[i] = new_rotation
+        
+        #Rotate points by new flattened quaternion.
+        forward_vector = np.array([0,0,1])
+        forward_vector = new_rotation.apply(forward_vector)
+        forward_vector[1] = 0
+        new_rotation = (R.from_quat(orientation_quaternion(forward_vector,absolute_upward_vector)))
+        
+        point_clouds_list[i,:,:3] = (R.from_quat(new_rotation)).apply(point_clouds_list[i,:,:3])
+
+        #Apply colour of chosen frame
+        point_clouds_list[i,:,3:] = point_clouds_list[frame_to_target,:,3:]
+        
+        
+
 
 
 """
@@ -952,6 +1096,9 @@ def get_3d_angles(keypoints_3d):
     the third value is the final point for junctions.
     
     The fourth and fifth value is the initial and final up vector respectivly:
+    
+    Note that connected pairs function is also present in the slerp function to some extent, if you change it please
+    update the slerp function as well.
     """
     connected_pairs = [[17,8,14,forward_vector,chest_up_vector], [17,8,11,forward_vector,chest_up_vector], 
                        [17,8,7,forward_vector,chest_up_vector], [8,7,0,chest_up_vector,hip_up_vector], 
