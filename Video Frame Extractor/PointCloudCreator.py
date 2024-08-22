@@ -214,7 +214,14 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
             """
             pose_points_3d, point_cloud, pose_angles_3d[:2] = rotate_about_head(pose_points_3d,point_cloud,pose_angles_3d[:2])            
 
-            
+            """
+            In this area, we check if the frame is faulty based on odd joints such as backwards knees
+            """
+            current_frame_faulty = odd_joints_check(pose_angles_3d)
+            if current_frame_faulty:
+                previous_frame_faulty = True
+                continue
+
             if(previous_frame_faulty and (num_previous_faulty_frames > fill_in_cutoff)): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
@@ -275,7 +282,22 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     return data
 
 """
-rotates processed pose_points_3d and pointcloud about the head orientation
+Given the pose angle quaternions, returns False if no odd joints (such as backwards knees) are
+detected and returns True if an odd joint is detected.
+
+Currently just does knees, may implement more in the future.
+"""
+def odd_joints_check(pose_quaternions):
+    knee_cutoff_threshhold = -0.01 #If the knee angle x value (the value other than w that varies) is anywhere below this, is a faulty angle
+    if(pose_quaternions[10][0] < knee_cutoff_threshhold or pose_quaternions[11][0] < knee_cutoff_threshhold):
+        return True #Odd knee joint detected
+    return False #Made it to the end with nothing odd detected.
+    
+    
+
+"""
+rotates processed pose_points_3d, pointcloud, and head angles of pose_angles_3d about the head orientation, while
+still keeping absolute up vector.
 """
 def rotate_about_head(pose_points_3d, pointcloud, head_angles):
     #calculate forward vector from averaging out vector to eyes and vector to mouth 
