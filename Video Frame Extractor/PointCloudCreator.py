@@ -297,8 +297,6 @@ def odd_joints_check(pose_quaternions):
     if(pose_quaternions[10][0] < knee_cutoff_threshhold or pose_quaternions[11][0] < knee_cutoff_threshhold):
         return True #Odd knee joint detected
     return False #Made it to the end with nothing odd detected.
-    
-    
 
 """
 rotates processed pose_points_3d, pointcloud, and head angles of pose_angles_3d about the head orientation, while
@@ -327,6 +325,65 @@ def rotate_about_head(pose_points_3d, pointcloud, head_angles):
     return pose_points_3d, pointcloud, head_angles
 
 """
+Attempts to fill in for initial faulty frames in primary data processing I.E. before process_clip is called,
+faulty frames caused by the frame itself rather than its relation to other frames.
+"""
+def seal_nicks(data, data_gaps):
+    print()
+
+"""
+Calculates a list of distance values for adjascent points given an array of points
+"""
+def calculate_distance_gaps(positions_list):
+    head_gaps = [] #This is a list of the distances between frames
+    for i in range((len(positions_list)-1)):
+        distance_vector = positions_list[i]-positions_list[(i+1)]
+        distance = np.sqrt(np.sum(np.square(distance_vector)))
+        head_gaps.append(distance)
+
+"""
+#For an array of pose data 3d frames, calculates the pose size gap values.
+"""
+def calculate_size_gaps(pose_data_3d):
+    pose_sizes = []
+    for i in pose_data_3d:
+        point_distances = []
+        covered_points = []
+        for i2 in range(len(i)):
+            covered_points.append(i2)
+            for i3 in range(len(i)):
+                if not i3 in covered_points:
+                    distance_vector = i[i2]-i[i3]
+                    distance = np.sqrt(np.sum(np.square(distance_vector)))
+                    point_distances.append(distance)
+        mean_distance = sum(point_distances)/len(point_distances)
+        pose_sizes.append(mean_distance)
+                 
+    #Now find the gaps between sizes for each frame
+    size_gaps = [] #This is a list of the distances between frames
+    for i in range((len(pose_sizes)-1)):
+        gap = abs(pose_sizes[i]-pose_sizes[(i+1)])
+        size_gaps.append(gap)
+        
+    return size_gaps
+
+"""
+#Calculates the standard deviation and mean for a list of numbers
+"""
+def deviations_and_mean(numbers_list):
+    #Calculate the mean
+    mean = sum(numbers_list)/len(numbers_list)
+    
+    #Calculate standard deviation
+    sum_for_deviation = 0
+    for i3 in numbers_list:
+        sum_for_deviation = sum_for_deviation+((i3-mean)**2)
+    
+    deviation = (sum_for_deviation/(len(numbers_list)-1))**0.5
+    
+    return mean, deviation #Return
+
+"""
 This function identifies issues based on changes in head position.
 The main issues it identifies are:
      -Brief "islands" where the head is in a drastically different position, likely caused by being placed in background
@@ -340,73 +397,25 @@ def process_clip(data, fill_in_cutoff):
     """
     First find gap indicators from the head suddenly changing position.
     """
-    head_gaps = [] #This is a list of the distances between frames
-    for i in range((len(data[3])-1)):
-        distance_vector = data[3][i]-data[3][(i+1)]
-        distance = np.sqrt(np.sum(np.square(distance_vector)))
-        head_gaps.append(distance)
-    gap_indicators = []
-    """
-    To find the gap indicators we need to do some statistics to find large deviations from the mean,
-    finding the mean, standard deviation, will later be used for z score.
-    """
-    #Calculate mean
-    sum_for_mean = 0
-    for i2 in head_gaps:
-        sum_for_mean = sum_for_mean+i2 #THIS WAS i before, an error but it still worked somehow, see how fixing it impacts
-    mean_head = sum_for_mean/len(head_gaps)
-    
-    #Calculate standard deviation
-    sum_for_deviation = 0
-    for i3 in head_gaps:
-        sum_for_deviation = sum_for_deviation+((i3-mean_head)**2)
-    
-    standard_deviation_head = (sum_for_deviation/(len(head_gaps)-1))**0.5
+    head_gaps = calculate_distance_gaps(data[3]) #This is a list of the distances between frames
+        
+    mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
 
     """
     Now detect gaps based on sudden increases in the average distances between points, I.E. changes in the size of the individual.
-    
-    First find the average distances/pose size for each frame.
     """
-    pose_sizes = []
-    for i in data[0]:
-        point_distances = []
-        covered_points = []
-        for i2 in range(len(i)):
-            covered_points.append(i2)
-            for i3 in range(len(i)):
-                if not i3 in covered_points:
-                    distance_vector = i[i2]-i[i3]
-                    distance = np.sqrt(np.sum(np.square(distance_vector)))
-                    point_distances.append(distance)
-        mean_distance = sum(point_distances)/len(point_distances)
-        pose_sizes.append(mean_distance)
-                   
-    #Now find the gaps between sizes for each frame
-    size_gaps = [] #This is a list of the distances between frames
-    for i in range((len(pose_sizes)-1)):
-        gap = abs(pose_sizes[i]-pose_sizes[(i+1)])
-        size_gaps.append(gap)
+    size_gaps = calculate_size_gaps(data[0])
+    
+    mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
         
     #If size_gaps and head_gaps are different lengths something went wrong.
     if len(size_gaps) != len(head_gaps):
         raise Exception("Different number of head gaps than pose size gaps.")
     
     """
-    Do same statistics on size gaps as on head gaps, also to be used for z score.
-    """
-    mean_sizes = sum(size_gaps)/len(size_gaps)
-    
-    #Calculate standard deviation
-    sum_for_deviation = 0
-    for i3 in size_gaps:
-        sum_for_deviation = sum_for_deviation+((i3-mean_sizes)**2)
-    
-    standard_deviation_sizes = (sum_for_deviation/(len(size_gaps)-1))**0.5
-    
-    """
     Now calculate z scores for both head gaps and size gaps, and assign gap indicators based on z score.
     """
+    gap_indicators = []
     #Calculate z scores and use to find large jumps in data.
     gap_indicators.append(-1) #First and final gaps should also be marked 
     for i4 in range(len(head_gaps)):
