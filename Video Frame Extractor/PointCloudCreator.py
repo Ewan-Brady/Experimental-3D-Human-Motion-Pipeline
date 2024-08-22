@@ -363,6 +363,11 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
         
         pose_sizes.append(pose_sizes_new) #Append pose_sizes
     
+    if(len(head_gaps) != len(size_gaps)):
+        raise Exception("Mistmatch between size_gaps and head_gaps length in nick-sealing stage.")
+    if((len(head_gaps) == 0) or (len(size_gaps) == 0)):
+        return [] #In this case there isnt a single, usable frame that isnt isolated. This data is to be discarded.
+
     mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
     mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
     
