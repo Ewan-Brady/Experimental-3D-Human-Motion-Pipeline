@@ -123,7 +123,7 @@ and the directory where the depth data is stored, split the data into usable tra
 for training (the processing is done by pose_extract_3d, but you need to split the data first.)
 """
 minimum_video_frames = 20 #discard all data clips that are below this frame length. 
-fill_in_cutoff = 2 #Attempt to Fill in all gaps of this length or lower.
+fill_in_cutoff = 5 #Attempt to Fill in all gaps of this length or lower.
 def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clouds, video_name):
     """
     load skseleton data from file
@@ -184,6 +184,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     previous_frame_faulty = True #Having this as true makes it so that it makes a new first clip.
     num_previous_faulty_frames = fill_in_cutoff+1 #Must always start greater than fill-in cutoff so it makes new first clip
     data = []
+    clip_gaps = []
     for i2 in range(num_frames):
         if(i2 in faulty_frames):
             previous_frame_faulty = True #Frame is faulty dont process
@@ -223,21 +224,24 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 num_previous_faulty_frames += 1
                 continue
 
-            if(previous_frame_faulty and (num_previous_faulty_frames > fill_in_cutoff)): #Make a new clip with gathered frame data, previous frames were marked faulty.
+            if(previous_frame_faulty): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
                              np.array([point_cloud]),
                              np.array([head_pos]),
                              np.array([head_angle])])
+                clip_gaps.append(num_previous_faulty_frames)
                 num_previous_faulty_frames = 0
                 previous_frame_faulty=False
-            elif(previous_frame_faulty): #A small enough amount of previous frames were marked faulty to do a fill-in
                 """
+            
+            elif(previous_frame_faulty): #A small enough amount of previous frames were marked faulty to do a fill-in
+                
                 This segment here allows for filling in of short segments of faulty frames.
                 
                 One possible concern is this and later fill-in steps could all occur around the same area, resulting in
                 too much data being fill in. We will see if this ends up being a large issue.
-                """
+                
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
                 for i in range(num_previous_faulty_frames+1): #Concatenate the number of faulty frames +1, all but last will be replaced with fill-in
                     data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
@@ -248,7 +252,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 fill_in_slerp(data[index],(len(data[index][0])-2-num_previous_faulty_frames),(len(data[index][0])-1)) #Fill in faulty frames
                 
                 num_previous_faulty_frames = 0
-                previous_frame_faulty=False
+                previous_frame_faulty=False"""
             else:
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
                 data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
@@ -256,6 +260,13 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
                 data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
                 data[index][4] = np.concatenate([data[index][4], np.array([head_angle])], axis=0)
+    clip_gaps.append(fill_in_cutoff+1) #Indicates cant fill in gap between final element and the nonexistant element after that.
+
+    """
+    This function attempts to connect frames that are only separated by a small amount of faulty frames, 
+    ensuring that it is not a camera angle cut before doing so.
+    """
+    data, _, _ = seal_nicks(data, clip_gaps, fill_in_cutoff)
 
     """
     Remove too-short clips
@@ -327,9 +338,73 @@ def rotate_about_head(pose_points_3d, pointcloud, head_angles):
 """
 Attempts to fill in for initial faulty frames in primary data processing I.E. before process_clip is called,
 faulty frames caused by the frame itself rather than its relation to other frames.
+
+The process goes about as follows:
+    -First, feed all data clips into the function, along with the tracked gap lengths 
+    -Then, calculate total means and standard deviations based on the collective gaps of all of the clips 
+    -Then, for each gap length that is small enough that it could be filled in, check if the head_gap and size_gap are 
+    below the z_score threshhold. If they are, mark the two clips to be merged. 
+    -Finally, merge all clips marked to be merged, and return the clips. 
 """
-def seal_nicks(data, data_gaps):
-    print()
+primary_z_score_cutoff_head = 3 #The z-score cutoff to determine which head position changes are large enough jumps to be anomalies
+primary_z_score_cutoff_size = 3 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
+def seal_nicks(data, data_gaps, fill_in_cutoff):
+    head_gaps = []
+    size_gaps = []
+    pose_sizes = []
+    for clip in data:
+        head_gaps_new = calculate_distance_gaps(clip[3])
+        head_gaps = head_gaps + head_gaps_new #concatenate new head distance gaps
+        
+        pose_sizes_new, size_gaps_new = calculate_size_gaps(clip[0])
+        size_gaps = size_gaps + size_gaps_new #concatenate new size gaps
+        
+        pose_sizes.append(pose_sizes_new) #Append pose_sizes
+    
+    mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
+    mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
+    
+
+    gaps_to_merge = []
+    #data_gaps[0] is from -1 to 0, data_gaps[1] is from 0 to 1, I.E. data gaps index represents leading data piece. 
+    for i in range(len(data_gaps)):
+        if data_gaps[i] <= fill_in_cutoff:
+            initial = data[i-1]
+            final = data[i]
+            initial_index = len(initial[3])-1 #The final index of the initial clip
+
+            head_gap_vector = final[3][0]-initial[3][initial_index]
+            head_gap = np.sqrt(np.dot(head_gap_vector,head_gap_vector)) #Gap between first frame of final clip and final frame of initial clip
+            
+            size_gap = abs(pose_sizes[i][0]-pose_sizes[i-1][initial_index]) #Gap in size of first frame final clip and final frame initial clip
+                
+            z_score_head = (head_gap-mean_head)/standard_deviation_head
+            z_score_size = (size_gap-mean_sizes)/standard_deviation_sizes
+            
+            if(z_score_head < primary_z_score_cutoff_head and z_score_size < primary_z_score_cutoff_size): 
+                gaps_to_merge.append(i) #Passed z score tests, likely not a camera angle jump, order a fill in.  
+                
+    new_data = []
+    for i in range((len(data_gaps)-1)):
+        if i in gaps_to_merge: #Merge ordered with this piece and previous.
+            final_index = len(new_data)-1
+            
+            start_value = len(new_data[final_index][0])-1 #the final frame of the initial clip
+            end_value = data_gaps[i] + start_value + 1
+            
+            for i2 in range(len(new_data[final_index])): #First concatenate each data piece with a set of 0s in-between of specified size.
+                shape = list(data[i][i2][0].shape) #Get shape per frame
+                shape = [data_gaps[i]] + shape
+
+                filler_array = np.zeros(shape)
+
+                new_data[final_index][i2] = np.concatenate([new_data[final_index][i2], filler_array, data[i][i2]])
+            new_data[final_index] = fill_in_slerp(new_data[final_index],start_value,end_value) #Fill in the numpy zero array fillers via slerp fill-in method.
+            
+        else:
+            new_data.append(data[i]) #No merge ordered for this leading piece with previous, so append it.
+
+    return new_data, (mean_head, standard_deviation_head), (mean_sizes, standard_deviation_sizes)
 
 """
 Calculates a list of distance values for adjascent points given an array of points
@@ -340,9 +415,11 @@ def calculate_distance_gaps(positions_list):
         distance_vector = positions_list[i]-positions_list[(i+1)]
         distance = np.sqrt(np.sum(np.square(distance_vector)))
         head_gaps.append(distance)
+        
+    return head_gaps
 
 """
-#For an array of pose data 3d frames, calculates the pose size gap values.
+#For an array of pose data 3d frames, calculates the pose size gap values. Also returns pose sizes.
 """
 def calculate_size_gaps(pose_data_3d):
     pose_sizes = []
@@ -365,7 +442,7 @@ def calculate_size_gaps(pose_data_3d):
         gap = abs(pose_sizes[i]-pose_sizes[(i+1)])
         size_gaps.append(gap)
         
-    return size_gaps
+    return pose_sizes, size_gaps
 
 """
 #Calculates the standard deviation and mean for a list of numbers
@@ -391,8 +468,8 @@ The main issues it identifies are:
      -Jumps from the head hanging out in one position to hanging out in another, likely caused by a camera angle change.
      In this case in splits the clip.
 """
-z_score_cutoff_head = 3 #The z-score cutoff to determine which haed position changes are large enough jumps to be anomalies
-z_score_cutoff_size = 3 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
+secondary_z_score_cutoff_head = 3 #The z-score cutoff to determine which head position changes are large enough jumps to be anomalies
+secondary_z_score_cutoff_size = 3 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
 def process_clip(data, fill_in_cutoff):
     """
     First find gap indicators from the head suddenly changing position.
@@ -404,7 +481,7 @@ def process_clip(data, fill_in_cutoff):
     """
     Now detect gaps based on sudden increases in the average distances between points, I.E. changes in the size of the individual.
     """
-    size_gaps = calculate_size_gaps(data[0])
+    pose_sizes, size_gaps = calculate_size_gaps(data[0])
     
     mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
         
@@ -422,7 +499,7 @@ def process_clip(data, fill_in_cutoff):
         z_score_head = (head_gaps[i4]-mean_head)/standard_deviation_head
         z_score_size = (size_gaps[i4]-mean_sizes)/standard_deviation_sizes
 
-        if(z_score_head > z_score_cutoff_head or z_score_size > z_score_cutoff_size): #Large jump identified
+        if(z_score_head > secondary_z_score_cutoff_head or z_score_size > secondary_z_score_cutoff_size): #Large jump identified
             gap_indicators.append(i4)
             
                 
@@ -457,8 +534,6 @@ def process_clip(data, fill_in_cutoff):
     segment_starts_ends[3] = [16,21]
     segment_starts_ends[4] = [22,23]
     """
-    print()
-    print("Segments are: " + str(contious_segment_lengths))
     
     #This gets +1 for odd indexes and 0 for even indexes
     #It identifies whether the maximum segments index is even or odd.
@@ -507,7 +582,7 @@ def process_clip(data, fill_in_cutoff):
                 
                 #If z score cutoff allows it, fill in
                 #Otherwise, split.
-                if((z_score_head < z_score_cutoff_head) and (z_score_size<z_score_cutoff_size)): 
+                if((z_score_head < secondary_z_score_cutoff_head) and (z_score_size<secondary_z_score_cutoff_size)): 
                     indexes_to_fill_in.append(segment)
                 else:
                     indexes_to_split.append(segment)
@@ -528,7 +603,8 @@ def process_clip(data, fill_in_cutoff):
             else:
                 start_and_end = segment_starts_ends[segment]
                 
-                head_gap = abs(data[3][start_and_end[0]]-data[3][start_and_end[1]])
+                head_gap_vector = data[3][start_and_end[0]]-data[3][start_and_end[1]]
+                head_gap = np.sqrt(np.dot(head_gap_vector,head_gap_vector))
                 size_gap = abs(pose_sizes[start_and_end[0]]-pose_sizes[start_and_end[1]])
                 
                 z_score_head = (head_gap-mean_head)/standard_deviation_head
@@ -536,7 +612,7 @@ def process_clip(data, fill_in_cutoff):
                 
                 #If z score cutoff allows it, fill in
                 #Otherwise, split.
-                if(z_score_head < z_score_cutoff_head) and (z_score_size<z_score_cutoff_size):
+                if(z_score_head < secondary_z_score_cutoff_head) and (z_score_size<secondary_z_score_cutoff_size):
                     indexes_to_fill_in.append(segment)
                 else:
                     indexes_to_split.append(segment)
