@@ -207,6 +207,12 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
             if current_frame_faulty: #Frame was marked faulty in the loop, so move on to the next frame 
                 continue
             
+            """
+            These 2 lines rotate all points so that the head always has 0 rotation. If you dont want it to do that just get rid of it.
+            """
+            pose_points_3d, point_cloud = rotate_about_head(pose_points_3d,point_cloud)
+            pose_angles_3d = get_3d_angles(pose_points_3d)
+            
             if(previous_frame_faulty and (num_previous_faulty_frames > fill_in_cutoff)): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
                              np.array([pose_angles_3d]),
@@ -265,6 +271,27 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     the 3d point frames, 3d angle frames, and point cloud frames for each clip.
     """
     return data
+
+"""
+rotates processed pose_points_3d and pointcloud about the head orientation
+"""
+def rotate_about_head(pose_points_3d, pointcloud):
+    #calculate forward vector from averaging out vector to eyes and vector to mouth 
+    forward_vector_1 = pose_points_3d[9]-pose_points_3d[17] #Tip-tail, mouth-head
+    forward_vector_2 = pose_points_3d[10]-pose_points_3d[17] #Tip-tail, eyes-head
+    forward_vector = forward_vector_1+forward_vector_2
+    forward_vector[1] = 0 #remove vertical component
+    forward_vector = forward_vector/np.sqrt(np.dot(forward_vector,forward_vector))
+
+    #Calculate upward vector and make quaternion    
+    upward_vector = np.array([0,1,0])#Just points straight up relative to coordanate system. #pose_points_3d[17]-pose_points_3d[8] #goes from the the midshoulder to the head
+    #Upward vector is made perpendicular in the function, causing it to go straight up
+    head_rotation = (R.from_quat(orientation_quaternion(forward_vector,upward_vector))).inv()
+    
+    pose_points_3d = head_rotation.apply(pose_points_3d)
+    pointcloud[:,:3] = head_rotation.apply(pointcloud[:,:3])
+    
+    return pose_points_3d, pointcloud
 
 """
 This function identifies issues based on changes in head position.
@@ -857,20 +884,21 @@ def get_3d_angles(keypoints_3d):
     hip_up_vector = -np.cross(hip_hip_line,abdomen_midhip_line)
     
     #Use this function to calculate upper limbs (knees or biceps)
-    def upperlimb_up_vector_calc(hip_or_chest_up_vector,hand_or_foot,knee_or_elbow,hip_or_shoulder):
+    def upperlimb_up_vector_calc(hip_or_chest_up_vector,hand_or_foot,knee_or_elbow,hip_or_shoulder,flip_to_torso=True):
         upper_limb_vector = knee_or_elbow-hip_or_shoulder #knee/eblow minus hip/shoulder (tip minus tail)
         forelimb_vector = hand_or_foot-knee_or_elbow #foot/hand minus knee/elbow (tip minus tail)
         upper_limb_up_vector = upper_limb_vector-forelimb_vector
         
         #If flipped vector is more similar to hip/chest use it
-        if np.dot(upper_limb_up_vector,hip_or_chest_up_vector) < np.dot(-upper_limb_up_vector,hip_or_chest_up_vector): 
+        if flip_to_torso and (np.dot(upper_limb_up_vector,hip_or_chest_up_vector) < np.dot(-upper_limb_up_vector,hip_or_chest_up_vector)): 
             upper_limb_up_vector = -upper_limb_up_vector
             
         return upper_limb_up_vector
     
     #Call upperlimb function to calculate upper limbs (knees and biceps)
-    left_bicep_vector = upperlimb_up_vector_calc(chest_up_vector,keypoints_3d[13],keypoints_3d[12],keypoints_3d[11])
-    right_bicep_vector = upperlimb_up_vector_calc(chest_up_vector,keypoints_3d[16],keypoints_3d[15],keypoints_3d[14])
+    #Biceps are not flipped to torso as biceps can face backwards, unfortunantly no real way to verify that it is not reversed.
+    left_bicep_vector = upperlimb_up_vector_calc(chest_up_vector,keypoints_3d[13],keypoints_3d[12],keypoints_3d[11], False)
+    right_bicep_vector = upperlimb_up_vector_calc(chest_up_vector,keypoints_3d[16],keypoints_3d[15],keypoints_3d[14], False)
     left_thigh_vector = upperlimb_up_vector_calc(hip_up_vector,keypoints_3d[6],keypoints_3d[5],keypoints_3d[4])
     right_thigh_vector = upperlimb_up_vector_calc(hip_up_vector,keypoints_3d[3],keypoints_3d[2],keypoints_3d[1])
     
@@ -1092,11 +1120,10 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
             """
             This bit of code is usefuk to uncomment if you are redoing data collection and you want to make sure clips that are known
             to not make it past filters are discarded, run it over the old data.
-            
             if(not os.path.exists((to_check + "_clip_0/pointcloud.npy"))):
                 add_to_covered_list(to_check)
-                
             """
+            
             if(os.path.exists((to_check + "_clip_0/pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
                 skip_occured = True
                 skips = skips + 1
