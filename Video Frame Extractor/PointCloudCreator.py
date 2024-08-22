@@ -193,8 +193,8 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                                                                       depth_frames[i2], point_clouds[i2]) #Process frame
             
             """
-            Before adding it to the data, one last check should be done for if the frame is faulty or not.
-            Check by depth, if any pose point is below the mean depth it is probally in the background.
+            Before adding it to the data, Check by depth, if any pose point is below the mean depth it is probally in the background.
+            If it is in the background the frame is faulty and is discarded.
             """
             mean_depth = np.sum(point_cloud,axis=0)[2]/len(point_cloud)
             current_frame_faulty = False
@@ -208,10 +208,12 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 continue
             
             """
-            These 2 lines rotate all points so that the head always has 0 rotation. If you dont want it to do that just get rid of it.
+            This line rotates all points rotate relative to the head, other than on the up axis (y)
+            If you dont want it to do that comment it out.
+            It also includes updating the angles to reflect the new points.
             """
-            pose_points_3d, point_cloud = rotate_about_head(pose_points_3d,point_cloud)
-            pose_angles_3d = get_3d_angles(pose_points_3d)
+            pose_points_3d, point_cloud, pose_angles_3d[:2] = rotate_about_head(pose_points_3d,point_cloud,pose_angles_3d[:2])            
+
             
             if(previous_frame_faulty and (num_previous_faulty_frames > fill_in_cutoff)): #Make a new clip with gathered frame data, previous frames were marked faulty.
                 data.append([np.array([pose_points_3d]),
@@ -275,7 +277,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
 """
 rotates processed pose_points_3d and pointcloud about the head orientation
 """
-def rotate_about_head(pose_points_3d, pointcloud):
+def rotate_about_head(pose_points_3d, pointcloud, head_angles):
     #calculate forward vector from averaging out vector to eyes and vector to mouth 
     forward_vector_1 = pose_points_3d[9]-pose_points_3d[17] #Tip-tail, mouth-head
     forward_vector_2 = pose_points_3d[10]-pose_points_3d[17] #Tip-tail, eyes-head
@@ -287,11 +289,16 @@ def rotate_about_head(pose_points_3d, pointcloud):
     upward_vector = np.array([0,1,0])#Just points straight up relative to coordanate system. #pose_points_3d[17]-pose_points_3d[8] #goes from the the midshoulder to the head
     #Upward vector is made perpendicular in the function, causing it to go straight up
     head_rotation = (R.from_quat(orientation_quaternion(forward_vector,upward_vector))).inv()
-    
+    head_rotation_matrix = head_rotation.as_matrix()
+
+    for i in range(len(head_angles)):
+        old_orientation = (R.from_quat(head_angles[i])).as_matrix()
+        head_angles[i] = (R.from_matrix(np.matmul(head_rotation_matrix,old_orientation))).as_quat()
+
     pose_points_3d = head_rotation.apply(pose_points_3d)
     pointcloud[:,:3] = head_rotation.apply(pointcloud[:,:3])
     
-    return pose_points_3d, pointcloud
+    return pose_points_3d, pointcloud, head_angles
 
 """
 This function identifies issues based on changes in head position.
@@ -946,10 +953,18 @@ def get_3d_angles(keypoints_3d):
     for i in connected_pairs:
         initial_forward = keypoints_3d[i[1]] - keypoints_3d[i[0]] #Get forward vectors
         final_forward = keypoints_3d[i[2]] - keypoints_3d[i[1]]
-        
+        final_up = np.copy(i[4])
+
         initial_quaternion = orientation_quaternion(initial_forward,i[3]) #Get orientation quaternions
-        final_quaternion = orientation_quaternion(final_forward,i[4])
+        initial_inverted = ((R.from_quat(initial_quaternion)).inv())
         
+        final_forward = initial_inverted.apply(final_forward)
+        final_up = initial_inverted.apply(final_up)
+        
+        final_quaternion = orientation_quaternion(final_forward,final_up)
+        
+        initial_quaternion = np.array([0,0,0,1])
+
         #quaternion_angles.append(final_quaternion)
         quaternion_angles.append(quaternion_between_quaternions(initial_quaternion,final_quaternion)) #Append quaternion to go from one to the other
         
