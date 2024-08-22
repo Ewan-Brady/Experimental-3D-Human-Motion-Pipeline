@@ -266,8 +266,10 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     This function attempts to connect frames that are only separated by a small amount of faulty frames, 
     ensuring that it is not a camera angle cut before doing so.
     """
-    data, _, _ = seal_nicks(data, clip_gaps, fill_in_cutoff)
-
+    if(len(data) > 0):
+        data, _, _ = seal_nicks(data, clip_gaps, fill_in_cutoff)
+    else:
+        return []
     """
     Remove too-short clips
     """
