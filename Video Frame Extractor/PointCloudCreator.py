@@ -370,7 +370,7 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
         In this case there isnt a single, usable frame that isnt isolated. While in theory this data could be used,
         we cannot verify camera cuts and so it is to be discarded
         """
-        return []
+        return [], (0,0), (0,0)
     
     mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
     mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
