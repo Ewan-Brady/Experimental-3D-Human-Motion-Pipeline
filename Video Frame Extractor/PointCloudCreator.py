@@ -153,7 +153,6 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
            np.array_equal(skeleton_frames_3d[i],np.full(skeleton_frames_3d[i].shape,-1))):
             faulty_frames.append(i)
         
-        
         #Copypasted from pointcloud functions, use this to get depth for frame
         depth_frame = (depth_directory+ "/" + video_name + "_frame" + str(i) + ".npy")
 
@@ -246,7 +245,8 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                     data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
                     data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
                     data[index][4] = np.concatenate([data[index][4], np.array([head_angle])], axis=0)
-                fill_in_frames(data[index],(len(data[index])-2-num_previous_faulty_frames),(len(data[index])-1)) #Fill in faulty frames
+                fill_in_slerp(data[index],(len(data[index][0])-2-num_previous_faulty_frames),(len(data[index][0])-1)) #Fill in faulty frames
+                
                 num_previous_faulty_frames = 0
                 previous_frame_faulty=False
             else:
@@ -323,7 +323,7 @@ def rotate_about_head(pose_points_3d, pointcloud, head_angles):
 
     pose_points_3d = head_rotation.apply(pose_points_3d)
     pointcloud[:,:3] = head_rotation.apply(pointcloud[:,:3])
-    
+
     return pose_points_3d, pointcloud, head_angles
 
 """
@@ -448,6 +448,8 @@ def process_clip(data, fill_in_cutoff):
     segment_starts_ends[3] = [16,21]
     segment_starts_ends[4] = [22,23]
     """
+    print()
+    print("Segments are: " + str(contious_segment_lengths))
     
     #This gets +1 for odd indexes and 0 for even indexes
     #It identifies whether the maximum segments index is even or odd.
@@ -485,7 +487,22 @@ def process_clip(data, fill_in_cutoff):
             elif (segment == (len(contious_segment_lengths)-1)): 
                 remove_last_segment = True #Last frame is a short glitch, insufficent information to fill it in
             else:
-                indexes_to_fill_in.append(segment)
+                start_and_end = segment_starts_ends[segment]
+                
+                head_gap_vector = data[3][start_and_end[0]]-data[3][start_and_end[1]]
+                head_gap = np.sqrt(np.dot(head_gap_vector,head_gap_vector))
+                size_gap = abs(pose_sizes[start_and_end[0]]-pose_sizes[start_and_end[1]])
+                
+                z_score_head = (head_gap-mean_head)/standard_deviation_head
+                z_score_size = (size_gap-mean_sizes)/standard_deviation_sizes
+                
+                #If z score cutoff allows it, fill in
+                #Otherwise, split.
+                if((z_score_head < z_score_cutoff_head) and (z_score_size<z_score_cutoff_size)): 
+                    indexes_to_fill_in.append(segment)
+                else:
+                    indexes_to_split.append(segment)
+                    loop_current_parity += 1 #Swap the parity being checked.
                 
     
     #Backward loop
@@ -500,7 +517,21 @@ def process_clip(data, fill_in_cutoff):
             elif (segment == 0):
                 remove_first_segment = True #First frame is a short glitch, insufficent information to fill it in.
             else:
-                indexes_to_fill_in.append(segment)
+                start_and_end = segment_starts_ends[segment]
+                
+                head_gap = abs(data[3][start_and_end[0]]-data[3][start_and_end[1]])
+                size_gap = abs(pose_sizes[start_and_end[0]]-pose_sizes[start_and_end[1]])
+                
+                z_score_head = (head_gap-mean_head)/standard_deviation_head
+                z_score_size = (size_gap-mean_sizes)/standard_deviation_sizes
+                
+                #If z score cutoff allows it, fill in
+                #Otherwise, split.
+                if(z_score_head < z_score_cutoff_head) and (z_score_size<z_score_cutoff_size):
+                    indexes_to_fill_in.append(segment)
+                else:
+                    indexes_to_split.append(segment)
+                    loop_current_parity += 1 #Swap the parity being checked.
 
     indexes_to_fill_in.sort()
     indexes_to_split.sort()
@@ -514,7 +545,7 @@ def process_clip(data, fill_in_cutoff):
     for index in indexes_to_fill_in:
         if(index != 0 and index != (len(contious_segment_lengths)-1)): #Check that not start or end frame as those cant be filled in.
             start_and_end = segment_starts_ends[index]
-            data = fill_in_frames(data,(start_and_end[0]-1),(start_and_end[1]+1)) 
+            data = fill_in_slerp(data,(start_and_end[0]-1),(start_and_end[1]+1)) 
 
     #Second, remove front and rear segments if nessecary
     covered_frames = 0 #Number of beginning indexes removed from data. 
@@ -578,6 +609,8 @@ Extrapolates intermediate frames by quaternion angle changes found by slerp
 Process:
      -Quaternion angles are varied overtime by quaternion slerp, initial position is start, final position is end, and inbetween
       angles are extrapolated by slerp.
+     -For pose face points that do not have a designated quaternion a similar process is done to other pose points except a start and
+     end quaternion for them is calculated first.
      -Point positions are extrapolated as follows
            -The head position is always 0,0,0 so we just keep it that way
            -A slope for change in distance per frame between each limb/segment is found by the distance in the initial and final frame
@@ -600,13 +633,13 @@ def fill_in_slerp(clip, start, end):
     point_clouds_list = clip[2]
     head_angles = clip[4]
    
-    times = range(0,end-start)
+    times = range(0,end+1-start)
     
     """
     First, extrapolate new quaternions
     """
-    for i in range(len(pose_points_3d_list[0])): #Iterate over each quaternion that varies overtime
-        slerp = Slerp([0, end-start],[pose_points_3d_list[start],pose_points_3d_list[end]])
+    for i in range(len(pose_angles_3d_list[0])): #Iterate over each quaternion that varies overtime
+        slerp = Slerp([0, end-start],R.concatenate([R.from_quat(pose_angles_3d_list[start][i]),R.from_quat(pose_angles_3d_list[end][i])]))
             
         intermediate_rots = slerp(times).as_quat()
         
@@ -617,6 +650,25 @@ def fill_in_slerp(clip, start, end):
             i3 = i3+1
     
     """
+    Step 1.5: Calculate slerp quaternions for the facial points. 
+    """
+    mouth_initial_vector = pose_points_3d_list[start][9]-pose_points_3d_list[start][17] #Calculate forward vectors
+    mouth_final_vector = pose_points_3d_list[end][9]-pose_points_3d_list[end][17]
+    eye_initial_vector = pose_points_3d_list[start][10]-pose_points_3d_list[start][17]
+    eye_final_vector = pose_points_3d_list[end][10]-pose_points_3d_list[end][17]
+    
+    mouth_initial = orientation_quaternion(mouth_initial_vector,absolute_upward_vector) #Calculate quaternions
+    mouth_final = orientation_quaternion(mouth_final_vector,absolute_upward_vector)
+    eye_initial = orientation_quaternion(eye_initial_vector,absolute_upward_vector)
+    eye_final = orientation_quaternion(eye_final_vector,absolute_upward_vector)
+
+    mouth_slerp = Slerp([0, end-start],R.concatenate([R.from_quat(mouth_initial),R.from_quat(mouth_final)])) #Calculate quaternion slerps
+    eye_slerp = Slerp([0, end-start],R.concatenate([R.from_quat(eye_initial),R.from_quat(eye_final)]))
+    
+    mouth_quaternions = mouth_slerp(times).as_quat() #Convert to quaternion list
+    eye_quaternions = eye_slerp(times).as_quat()
+
+    """
     Second, extrapolate new points.
     
     connected pairs first two elements are initial and final point, while
@@ -624,8 +676,13 @@ def fill_in_slerp(clip, start, end):
     
     They are ordered by the number of segments down the head, so their initial segment is always calculated already before they
     try to use it to extrapolate the final segment.
+    
+    -1 signals the eye custom-calculated quaternion,
+    -2 signals the mouth custom-calculated quaternion
     """
-    connected_pairs = [[17, 8, 1], #quaternion 1, direct at head
+    connected_pairs = [[17, 9, -2], #Custom-calculatd quaterion, direct at head
+                       [17, 10, -1], #Custom-calculatd quaterion, direct at head
+                       [17, 8, 1], #quaternion 1, direct at head
                        [8, 14, 1, 2], #quaternion 2, one layer down from head
                        [8, 11, 1, 3], #quaternion 3, one layer down from head
                        [8, 7, 1, 4], #quaternion 4, one layer down from head
@@ -652,10 +709,18 @@ def fill_in_slerp(clip, start, end):
         
         for i in range(start, (end+1)):
             rotation_matrix = np.identity(3)
-            for i in range((len(pair)-1),1,-1): #Apply quaternions sucessivly as matrixes to get absolute in-space orientation
-                matrix_to_multiply = (R.from_quat(pose_angles_3d_list[i][pair[i]])).as_matrix()
+            for i2 in range((len(pair)-1),1,-1): #Apply quaternions sucessivly as matrixes to get absolute in-space orientation
+                if(pair[i2] > -1):
+                    matrix_to_multiply = (R.from_quat(pose_angles_3d_list[i][pair[i2]])).as_matrix()
+                else:
+                    index = i-start
+                    if pair[i2] == -1:
+                        matrix_to_multiply = (R.from_quat(eye_quaternions[index])).as_matrix()
+                    else:
+                        matrix_to_multiply = (R.from_quat(mouth_quaternions[index])).as_matrix()
                 rotation_matrix = np.matmul(matrix_to_multiply,rotation_matrix)
-            
+
+
             rotation = R.from_matrix(rotation_matrix) #Convert absolute in-space orientation matrix to a rotation object
             
             magnitude = initial_vector_mag + (i-start)*magnitude_change_overtime #Calculate magntude for that frame.
@@ -668,9 +733,9 @@ def fill_in_slerp(clip, start, end):
     Finally, fill in pointclouds and quaternions pre-flattening.
     """
     initial_rotation = (R.from_quat(head_angles[start])) #This is the initial rotation
-    final_rotation = (R.from_quat(head_angles[end])).inv() #This is the final rotation
+    final_rotation = (R.from_quat(head_angles[end])) #This is the final rotation
     
-    head_slerp = Slerp([0, end-start], [initial_rotation, final_rotation])
+    head_slerp = Slerp([0, end-start], R.concatenate([initial_rotation, final_rotation]))
     intermediate_rots = head_slerp(times).as_quat() #generate intermediate rotations of head
     
     i3 = 0
@@ -699,16 +764,24 @@ def fill_in_slerp(clip, start, end):
         i3 = i3+1
         head_angles[i] = new_rotation
         
-        #Rotate points by new flattened quaternion.
+        #Rotate points by new vertically flattened quaternion.
+        new_rotation = (R.from_quat(new_rotation))
         forward_vector = np.array([0,0,1])
         forward_vector = new_rotation.apply(forward_vector)
         forward_vector[1] = 0
         new_rotation = (R.from_quat(orientation_quaternion(forward_vector,absolute_upward_vector)))
         
-        point_clouds_list[i,:,:3] = (R.from_quat(new_rotation)).apply(point_clouds_list[i,:,:3])
+        point_clouds_list[i,:,:3] = new_rotation.apply(point_clouds_list[i,:,:3])
 
         #Apply colour of chosen frame
         point_clouds_list[i,:,3:] = point_clouds_list[frame_to_target,:,3:]
+        
+    clip[0] = pose_points_3d_list 
+    clip[1] = pose_angles_3d_list
+    clip[2] = point_clouds_list
+    clip[4] = head_angles
+    
+    return clip
         
         
 
