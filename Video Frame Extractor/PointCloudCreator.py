@@ -267,13 +267,15 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     ensuring that it is not a camera angle cut before doing so.
     """
     if(len(data) > 0):
-        data, _, _ = seal_nicks(data, clip_gaps, fill_in_cutoff)
+        data, head_data, pose_data, angle_data = seal_nicks(data, clip_gaps, fill_in_cutoff)
     else:
         return []
+    
     """
     Remove too-short clips
     """
     data = remove_short_clips(data, minimum_video_frames)
+    
     """
     process clips for errors.
     
@@ -282,7 +284,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     """
     processed_data = []
     for clip in data:
-        clips = process_clip(clip, fill_in_cutoff)
+        clips = process_clip(clip, fill_in_cutoff, head_data, pose_data, angle_data)
         processed_data = processed_data + clips
     data = processed_data
     
@@ -349,11 +351,13 @@ The process goes about as follows:
     -Finally, merge all clips marked to be merged, and return the clips. 
 """
 primary_z_score_cutoff_head = 3 #The z-score cutoff to determine which head position changes are large enough jumps to be anomalies
-primary_z_score_cutoff_size = 3 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
+primary_z_score_cutoff_size = 3 #The z-score cutoff to determine which body position changes are large enough jumps to be anomalies
+primary_z_score_cutoff_angle = 3 #The z-score cutoff to determine which angle changes are large enough jumps to be anomalies
 def seal_nicks(data, data_gaps, fill_in_cutoff):
     head_gaps = []
     size_gaps = []
     pose_sizes = []
+    angle_gaps = []
     for clip in data:
         head_gaps_new = calculate_distance_gaps(clip[3])
         head_gaps = head_gaps + head_gaps_new #concatenate new head distance gaps
@@ -363,6 +367,9 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
         
         pose_sizes.append(pose_sizes_new) #Append pose_sizes
     
+        angle_gaps_new = calculate_angle_gaps(clip[1])
+        angle_gaps = angle_gaps + angle_gaps_new
+
     if(len(head_gaps) != len(size_gaps)):
         raise Exception("Mistmatch between size_gaps and head_gaps length in nick-sealing stage.")
     if((len(head_gaps) == 0) or (len(size_gaps) == 0)):
@@ -375,6 +382,14 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
     mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
     mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
     
+    #Get a list of the mean and deviations for the gaps in each angle
+    angle_gap_means = []
+    angle_gap_deviations = []
+    for i in angle_gaps:
+        angle_gap_mean, angle_gap_deviation = deviations_and_mean(angle_gaps)\
+        
+        angle_gap_means.append(angle_gap_mean)
+        angle_gap_deviations.append(angle_gap_deviation)
 
     gaps_to_merge = []
     #data_gaps[0] is from -1 to 0, data_gaps[1] is from 0 to 1, I.E. data gaps index represents leading data piece. 
@@ -392,7 +407,20 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
             z_score_head = (head_gap-mean_head)/standard_deviation_head
             z_score_size = (size_gap-mean_sizes)/standard_deviation_sizes
             
-            if(z_score_head < primary_z_score_cutoff_head and z_score_size < primary_z_score_cutoff_size): 
+            angle_z_score_pass = True
+            for angle_index in range(len(angle_gap_means)): #Iterate through each angle and get z score for its gap.
+                #Get gap angle between initial and final angle.
+                gap_angle = quaternion_between_quaternions(initial[1][initial_index][angle_index],final[1][0][angle_index]) 
+                #Get scalar value representing the gap
+                angle_gap = abs(gap_angle[3]-1)
+                #Calculate z score
+                z_score_angle = (angle_gap-angle_gap_means[angle_index])/angle_gap_deviations[angle_index]
+
+                if(z_score_angle >= primary_z_score_cutoff_angle):
+                    angle_z_score_pass = False #z score exceeds cutoff, do not merge.
+                    break
+
+            if(z_score_head < primary_z_score_cutoff_head and z_score_size < primary_z_score_cutoff_size) and angle_z_score_pass: 
                 gaps_to_merge.append(i) #Passed z score tests, likely not a camera angle jump, order a fill in.  
                 
     new_data = []
@@ -415,7 +443,7 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
         else:
             new_data.append(data[i]) #No merge ordered for this leading piece with previous, so append it.
 
-    return new_data, (mean_head, standard_deviation_head), (mean_sizes, standard_deviation_sizes)
+    return new_data, (mean_head, standard_deviation_head), (mean_sizes, standard_deviation_sizes), (angle_gap_means, angle_gap_deviations)
 
 """
 Calculates a list of distance values for adjascent points given an array of points
@@ -456,6 +484,32 @@ def calculate_size_gaps(pose_data_3d):
     return pose_sizes, size_gaps
 
 """
+Given 3d pose angle data, get values that represent the changes in angles
+Gives a (number of angles)x(frame_gaps) matrix of scalar values that represent the opposite of the W value for the quaternion
+that causes a change from 1 frame to another (I.E. if the w value of the quaternion is 0 then it will be 1, ect)
+"""
+def calculate_angle_gaps(pose_angles_3d):
+    print("In progress")
+    all_angle_gaps = []
+    for i in range(len(pose_angles_3d[0])): #Iterate over angles
+        angle_gaps = [] #Represents the angle gaps for the element
+        for initial_frame_index in range((len(pose_angles_3d)-1)): #Iterate over each frame except the last
+            initial_frame = pose_angles_3d[initial_frame_index][i] #Get initial angle
+            final_frame = pose_angles_3d[initial_frame_index+1][i] #Get final angle
+            
+            intermediate_quaternion = quaternion_between_quaternions(initial_frame,final_frame)
+            
+            change_value = abs(intermediate_quaternion[3]-1) #Subtract 1 from W and get absolute value to get value that represents change in angle.
+
+            angle_gaps.append(change_value) #Append to gaps between each frame
+            
+        angle_gaps = np.concatenate(angle_gaps) #Concatenate
+        all_angle_gaps.append(angle_gaps) #Append to gaps for each angle
+    
+    return np.stack(all_angle_gaps) #Stack angles and return.
+            
+
+"""
 #Calculates the standard deviation and mean for a list of numbers
 """
 def deviations_and_mean(numbers_list):
@@ -481,38 +535,59 @@ The main issues it identifies are:
 """
 secondary_z_score_cutoff_head = 3 #The z-score cutoff to determine which head position changes are large enough jumps to be anomalies
 secondary_z_score_cutoff_size = 3 #The z score cutoff to determine which body position changes are large enough jumps to be anomalies
-def process_clip(data, fill_in_cutoff):
+def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info):
     """
     First find gap indicators from the head suddenly changing position.
-    """
+    """    
     head_gaps = calculate_distance_gaps(data[3]) #This is a list of the distances between frames
         
-    mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
+    #mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
+    mean_head, standard_deviation_head = head_info
 
     """
     Now detect gaps based on sudden increases in the average distances between points, I.E. changes in the size of the individual.
     """
     pose_sizes, size_gaps = calculate_size_gaps(data[0])
+    #mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
+    mean_sizes, standard_deviation_sizes = pose_info
+
     
-    mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
-        
     #If size_gaps and head_gaps are different lengths something went wrong.
     if len(size_gaps) != len(head_gaps):
         raise Exception("Different number of head gaps than pose size gaps.")
     
+
     """
-    Now calculate z scores for both head gaps and size gaps, and assign gap indicators based on z score.
+    Now detect gaps based on sudden changes in angles
+    """
+    angle_gap_means, angle_gap_deviations = angle_info
+
+    """
+    Now calculate z scores for both head gaps and size gaps, and angle gaps, and assign gap indicators based on z score.
     """
     gap_indicators = []
     #Calculate z scores and use to find large jumps in data.
     gap_indicators.append(-1) #First and final gaps should also be marked 
     for i4 in range(len(head_gaps)):
-        z_score_head = (head_gaps[i4]-mean_head)/standard_deviation_head
-        z_score_size = (size_gaps[i4]-mean_sizes)/standard_deviation_sizes
+        z_score_head = (head_gaps[i4]-mean_head)/standard_deviation_head #Z score for head gap
+        z_score_size = (size_gaps[i4]-mean_sizes)/standard_deviation_sizes #Z score for size gap
 
-        if(z_score_head > secondary_z_score_cutoff_head or z_score_size > secondary_z_score_cutoff_size): #Large jump identified
+        #Check z scores for angle gaps
+        angle_z_score_pass = True
+        for angle_index in range(len(angle_gap_means)): #Iterate through each angle and get z score for its gap.
+            #Get gap angle between initial and final angle.
+            gap_angle = quaternion_between_quaternions(initial[1][initial_index][angle_index],final[1][0][angle_index]) 
+            #Get scalar value representing the gap
+            angle_gap = abs(gap_angle[3]-1)
+            #Calculate z score
+            z_score_angle = (angle_gap-angle_gap_means[angle_index])/angle_gap_deviations[angle_index]
+
+            if(z_score_angle >= primary_z_score_cutoff_angle):
+                angle_z_score_pass = False #z score exceeds cutoff, do not merge.
+                break
+
+        if(z_score_head > secondary_z_score_cutoff_head or z_score_size > secondary_z_score_cutoff_size) or (not angle_z_score_pass): #Large jump identified
             gap_indicators.append(i4)
-            
                 
     gap_indicators.append(len(head_gaps))# Mark final gap 
     
@@ -723,7 +798,7 @@ Process:
 def fill_in_slerp(clip, start, end):
     if(end-start <= 1):
         raise Exception("Must be at least one frame to fill in.")
-    
+
     pose_points_3d_list = clip[0]
     pose_angles_3d_list = clip[1]
     point_clouds_list = clip[2]
