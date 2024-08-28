@@ -668,7 +668,6 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
                 
     gap_indicators.append(len(head_gaps))# Mark final gap
     
-    print(gap_indicators)
     """
     Now that we have identified the frames with gaps we can identify whether it is a brief change in position or
     a permanent one, and implement the corresponding changes.
@@ -761,7 +760,7 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
             else:
                 start_and_end = segment_starts_ends[segment]
                 
-                if fill_in_zscore_check(data,(data,start_and_end[0]-1),(start_and_end[1]+1),
+                if fill_in_zscore_check(data,data,(start_and_end[0]-1),(start_and_end[1]+1),
                                          (mean_head, standard_deviation_head, secondary_z_score_cutoff_head),
                                          (mean_sizes, standard_deviation_sizes, secondary_z_score_cutoff_size), 
                                          (angle_gap_means, angle_gap_deviations, secondary_z_score_cutoff_angle), 
