@@ -603,7 +603,7 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
     #Get scalar value representing the gap
     angle_gap = scalar_quaternion_gap(initial_data[4][initial_index],final_data[4][final_index]) 
     #Calculate z score
-    z_score_absolute_angle = (angle_gap-mean_head_angle)/standard_deviation_head_angle
+    z_score_absolute_angle = 0#(angle_gap-mean_head_angle)/standard_deviation_head_angle
 
     return (z_score_head < head_zscore_cutoff and z_score_size < size_zscore_cutoff 
             and angle_z_score_pass and z_score_absolute_angle < absolute_angle_zscore_cutoff)
@@ -1244,12 +1244,8 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     
     pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
 
+
     """
-    Stack found pixelspace 3d points and spread.
-    
-    Also make some alterations to the z points post-spread to make them better match the pre-spread pose.
-    """
-   
     z_dividedby_xy_ratios = [] 
     for i in pixelspace_points_3d:
         for i2 in pixelspace_points_3d:
@@ -1260,8 +1256,20 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
                 z_dividedby_xy_ratios.append((z_distance/xy_distance))
     average_z_xy_ratio = sum(z_dividedby_xy_ratios)/len(z_dividedby_xy_ratios)
 
+    """
+    
+    """
+    Stack found pixelspace 3d points and spread.
+    """
+    
     pixelspace_points_3d = np.stack(pixelspace_points_3d)
-    pixelspace_points_3d = cloud_FOV_spread(pixelspace_points_3d, FOV, FOV, 320, 240) #Do FOV spread on limb points
+    
+    new_pixelspace_head = cloud_FOV_spread(np.expand_dims(np.copy(pixelspace_points_3d[17]), axis=0), FOV, FOV, 320, 240) #Do FOV spread on limb points
+    displacement_factor = new_pixelspace_head-pixelspace_points_3d[17]
+    pixelspace_points_3d = pixelspace_points_3d+displacement_factor
+    
+    """
+    #pixelspace_points_3d = cloud_FOV_spread(pixelspace_points_3d, FOV, FOV, 320, 240) #Do FOV spread on limb points
 
     xy_distances = [] 
     z_distances = []
@@ -1282,10 +1290,10 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     for i in pixelspace_points_3d:
         i[2] *= new_z_multiplier
 
-    """
+    #
     Return pixelspace points and z multiplier.
     """
-    return pixelspace_points_3d, new_z_multiplier
+    return pixelspace_points_3d, 1#new_z_multiplier
 
 
 
