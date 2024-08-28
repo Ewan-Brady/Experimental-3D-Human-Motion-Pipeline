@@ -596,14 +596,14 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
         z_score_angle = (angle_gap-angle_gap_means[angle_index])/angle_gap_deviations[angle_index]
                 
         if(z_score_angle >= relative_angle_zscore_cutoff):
-            #angle_z_score_pass = False #z score exceeds cutoff, do not merge.
+            angle_z_score_pass = False #z score exceeds cutoff, do not merge.
             break
 
     #Absolute head angle zscore.
     #Get scalar value representing the gap
     angle_gap = scalar_quaternion_gap(initial_data[4][initial_index],final_data[4][final_index]) 
     #Calculate z score
-    z_score_absolute_angle = 0#(angle_gap-mean_head_angle)/standard_deviation_head_angle
+    z_score_absolute_angle = (angle_gap-mean_head_angle)/standard_deviation_head_angle
 
     return (z_score_head < head_zscore_cutoff and z_score_size < size_zscore_cutoff 
             and angle_z_score_pass and z_score_absolute_angle < absolute_angle_zscore_cutoff)
