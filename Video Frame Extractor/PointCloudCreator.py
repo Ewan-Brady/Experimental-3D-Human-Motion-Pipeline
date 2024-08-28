@@ -392,7 +392,7 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
     mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
     mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
     mean_head_angle, standard_deviation_head_angle = deviations_and_mean(head_angle_gaps)
-    
+
     #Get a list of the mean and deviations for the gaps in each angle
     angle_gap_means = []
     angle_gap_deviations = []
@@ -409,9 +409,8 @@ def seal_nicks(data, data_gaps, fill_in_cutoff):
             initial = data[i-1]
             final = data[i]
             initial_index = len(initial[3])-1 #The final index of the initial clip
-            
             if fill_in_zscore_check(initial,final,initial_index,0,
-                                     (mean_head, standard_deviation_head, primary_z_score_cutoff_head)
+                                     (mean_head, standard_deviation_head, primary_z_score_cutoff_head),
                                      (mean_sizes, standard_deviation_sizes, primary_z_score_cutoff_size), 
                                      (angle_gap_means, angle_gap_deviations, primary_z_score_cutoff_angle), 
                                      (mean_head_angle, standard_deviation_head_angle, primary_z_score_cutoff_absolute_angle)):
@@ -582,13 +581,12 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
     head_gap = np.sqrt(np.dot(head_gap_vector,head_gap_vector)) 
             
     pose_sizes_initial = calculate_pose_sizes(initial_data[0])
-    pose_sizes_final = calculate_pose_sizes(final_data[1])
+    pose_sizes_final = calculate_pose_sizes(final_data[0])
 
     size_gap = abs(pose_sizes_final[final_index]-pose_sizes_initial[initial_index]) #Gap in size of first frame final clip and final frame initial clip
-                
+  
     z_score_head = (head_gap-mean_head)/standard_deviation_head
     z_score_size = (size_gap-mean_sizes)/standard_deviation_sizes
-            
     #Relative angle zscores
     angle_z_score_pass = True
     for angle_index in range(len(angle_gap_means)): #Iterate through each angle and get z score for its gap.
@@ -598,15 +596,15 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
         z_score_angle = (angle_gap-angle_gap_means[angle_index])/angle_gap_deviations[angle_index]
                 
         if(z_score_angle >= relative_angle_zscore_cutoff):
-            angle_z_score_pass = False #z score exceeds cutoff, do not merge.
+            #angle_z_score_pass = False #z score exceeds cutoff, do not merge.
             break
 
     #Absolute head angle zscore.
     #Get scalar value representing the gap
-    angle_gap = scalar_quaternion_gap(initial_data[4][initial_index],final_data[4][0]) 
+    angle_gap = scalar_quaternion_gap(initial_data[4][initial_index],final_data[4][final_index]) 
     #Calculate z score
     z_score_absolute_angle = (angle_gap-mean_head_angle)/standard_deviation_head_angle
-    
+
     return (z_score_head < head_zscore_cutoff and z_score_size < size_zscore_cutoff 
             and angle_z_score_pass and z_score_absolute_angle < absolute_angle_zscore_cutoff)
     
@@ -647,10 +645,8 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
     """
     Now detect gaps based on sudden changes in angles
     """
-    angle_gaps = calculate_angle_gaps(data[1])
     angle_gap_means, angle_gap_deviations = angle_info
     
-    head_angle_gaps = list(calculate_individual_angle_gaps(data[4]))
     mean_head_angle, standard_deviation_head_angle = head_angle_info
     
     """
@@ -660,28 +656,18 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
     #Calculate z scores and use to find large jumps in data.
     gap_indicators.append(-1) #First and final gaps should also be marked 
     for i4 in range(len(head_gaps)):
-        z_score_head = (head_gaps[i4]-mean_head)/standard_deviation_head #Z score for head gap
-        z_score_size = (size_gaps[i4]-mean_sizes)/standard_deviation_sizes #Z score for size gap
+        initial_index = i4
+        final_index = i4+1
 
-        #Check z scores for relative angle gaps
-        angle_z_score_pass = True
-        for angle_index in range(len(angle_gap_means)): #Iterate through each angle and get z score for its gap.
-            #Get scalar value representing the gap
-            angle_gap = angle_gaps[angle_index][i4]
-            #Calculate z score
-            z_score_angle = (angle_gap-angle_gap_means[angle_index])/angle_gap_deviations[angle_index]
-            
-            if(z_score_angle >= secondary_z_score_cutoff_absolute_angle):
-                #angle_z_score_pass = False #z score exceeds cutoff, do not merge.
-                break
-
-        z_score_head_angle = (head_angle_gaps[i4]-mean_head_angle)/standard_deviation_head_angle
-
-        if(z_score_head > secondary_z_score_cutoff_head or z_score_size > secondary_z_score_cutoff_size 
-           or (not angle_z_score_pass) or z_score_head_angle > secondary_z_score_cutoff_absolute_angle): #Large jump identified
+        if not fill_in_zscore_check(data,data,initial_index,final_index,
+                                (mean_head, standard_deviation_head, secondary_z_score_cutoff_head),
+                                (mean_sizes, standard_deviation_sizes, secondary_z_score_cutoff_size), 
+                                (angle_gap_means, angle_gap_deviations, secondary_z_score_cutoff_angle), 
+                                (mean_head_angle, standard_deviation_head_angle, secondary_z_score_cutoff_absolute_angle)):
             gap_indicators.append(i4)
                 
-    gap_indicators.append(len(head_gaps))# Mark final gap 
+    gap_indicators.append(len(head_gaps))# Mark final gap
+    
     print(gap_indicators)
     """
     Now that we have identified the frames with gaps we can identify whether it is a brief change in position or
@@ -750,16 +736,11 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
             else:
                 start_and_end = segment_starts_ends[segment]
                 
-                head_gap_vector = data[3][start_and_end[0]]-data[3][start_and_end[1]]
-                head_gap = np.sqrt(np.dot(head_gap_vector,head_gap_vector))
-                size_gap = abs(pose_sizes[start_and_end[0]]-pose_sizes[start_and_end[1]])
-                
-                z_score_head = (head_gap-mean_head)/standard_deviation_head
-                z_score_size = (size_gap-mean_sizes)/standard_deviation_sizes
-                
-                #If z score cutoff allows it, fill in
-                #Otherwise, split.
-                if((z_score_head < secondary_z_score_cutoff_head) and (z_score_size<secondary_z_score_cutoff_size)): 
+                if fill_in_zscore_check(data,data,(start_and_end[0]-1),(start_and_end[1]+1),
+                                         (mean_head, standard_deviation_head, secondary_z_score_cutoff_head),
+                                         (mean_sizes, standard_deviation_sizes, secondary_z_score_cutoff_size), 
+                                         (angle_gap_means, angle_gap_deviations, secondary_z_score_cutoff_angle), 
+                                         (mean_head_angle, standard_deviation_head_angle, secondary_z_score_cutoff_absolute_angle)):
                     indexes_to_fill_in.append(segment)
                 else:
                     indexes_to_split.append(segment)
@@ -780,16 +761,11 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
             else:
                 start_and_end = segment_starts_ends[segment]
                 
-                head_gap_vector = data[3][start_and_end[0]]-data[3][start_and_end[1]]
-                head_gap = np.sqrt(np.dot(head_gap_vector,head_gap_vector))
-                size_gap = abs(pose_sizes[start_and_end[0]]-pose_sizes[start_and_end[1]])
-                
-                z_score_head = (head_gap-mean_head)/standard_deviation_head
-                z_score_size = (size_gap-mean_sizes)/standard_deviation_sizes
-                
-                #If z score cutoff allows it, fill in
-                #Otherwise, split.
-                if(z_score_head < secondary_z_score_cutoff_head) and (z_score_size<secondary_z_score_cutoff_size):
+                if fill_in_zscore_check(data,(data,start_and_end[0]-1),(start_and_end[1]+1),
+                                         (mean_head, standard_deviation_head, secondary_z_score_cutoff_head),
+                                         (mean_sizes, standard_deviation_sizes, secondary_z_score_cutoff_size), 
+                                         (angle_gap_means, angle_gap_deviations, secondary_z_score_cutoff_angle), 
+                                         (mean_head_angle, standard_deviation_head_angle, secondary_z_score_cutoff_absolute_angle)):
                     indexes_to_fill_in.append(segment)
                 else:
                     indexes_to_split.append(segment)
