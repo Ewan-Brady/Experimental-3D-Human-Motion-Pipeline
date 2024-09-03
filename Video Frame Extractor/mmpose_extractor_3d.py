@@ -49,8 +49,11 @@ def extract_2d_frames(model, frames_folder_2d):
     i = 0
     strikes2 = 0
     for img in images:
+        image = cv2.imread(img)
+        image = cv2.resize(image, (320, 240)) #Resize image to fit standardized resolution. 
+        
         # inference a single image
-        batch_results = inference_topdown(model, img)
+        batch_results = inference_topdown(model, image)
         results = merge_data_samples(batch_results).pred_instances
         
         head_strikes = 0
