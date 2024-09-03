@@ -1263,10 +1263,10 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     
     pixelspace_points_3d = np.stack(pixelspace_points_3d)
     
-    new_pixelspace_head = cloud_FOV_spread(np.expand_dims(np.copy(pixelspace_points_3d[17]), axis=0), FOV, FOV, 320, 240) #Do FOV spread on limb points
-    displacement_factor = new_pixelspace_head-pixelspace_points_3d[17]
-    pixelspace_points_3d = pixelspace_points_3d+displacement_factor
-    
+    new_pixelspace_head = cloud_FOV_spread(np.expand_dims(np.copy(pixelspace_points_3d[17]), axis=0), FOV, FOV, 320, 240) #Do FOV spread on head
+    displacement_factor = new_pixelspace_head-pixelspace_points_3d[17] #Update pose points to be relative to new head position
+    pixelspace_points_3d = pixelspace_points_3d+displacement_factor #Update pose points to be relative to new head position
+
     """
     #pixelspace_points_3d = cloud_FOV_spread(pixelspace_points_3d, FOV, FOV, 320, 240) #Do FOV spread on limb points
 
