@@ -73,8 +73,16 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
     width_middle = width/2
     height_middle = height/2
     POVDepth = width_middle/math.tan(angle_horizontal)#*width_middle
-    ratio1 = 0
-    ratio2 = 0
+    num_points = array.shape[0]
+    magnitudes = np.sqrt(np.sum(np.square(np.transpose(np.stack([(array[:, 0]-height_middle), (array[:, 1]-width_middle), array[:, 2]]))), 1))
+    direction_vectors = np.transpose(np.stack([array[:, 0],array[:, 1],np.zeros((num_points))]))-np.repeat(np.array([[height_middle,width_middle,POVDepth]]),[num_points], axis=0)
+    direction_vectors = direction_vectors/np.transpose(np.repeat(np.array([np.sqrt(np.sum(np.square(direction_vectors), 1))]), 3, axis=0))
+
+    array[:, 0] = direction_vectors[:, 0] * magnitudes
+    array[:, 1] = direction_vectors[:, 1] * magnitudes
+
+    """
+    OLD, less optimized spread code. Runs at about half the speed based on a brief test (covered 7 videos in 2 minutes as opposed to 14)
     for point in array:
         magnitude = np.sqrt(np.sum(np.square(np.array([(point[0]-height_middle), (point[1]-width_middle), point[2]]))))
         direction_vector = np.array([point[0],point[1],0])-np.array([height_middle,width_middle,POVDepth])
@@ -87,7 +95,8 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
         point[1] = direction_vector[1]
                 
         #point[2] = direction_vector[2] #THIS WAS COMMENTED OUT BEFORE
-
+    """
+    
     return array
 
 def numpy_vid_to_text(array):
