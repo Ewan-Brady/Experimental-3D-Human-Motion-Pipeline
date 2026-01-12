@@ -32,7 +32,6 @@ def convert_to_pointcloud(image, depth):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255.0
     image = cv2.resize(image, (320, 240))
     image = image * 255
-    #print(image.shape)
 
 
     depth = np.transpose(depth, (1, 2, 0))
@@ -43,14 +42,11 @@ def convert_to_pointcloud(image, depth):
     #depth_threshhold = np.max(depth)*depth_threshhold_fraction
     
     depth = depth * depth_multiplier
-    #print(depth.shape)
 
     cloud_preprocessed = np.concatenate([depth, image], axis = 2)
     cloud_preprocessed = np.transpose(cloud_preprocessed, (1,0,2))
     #cloud_preprocessed = np.flip(cloud_preprocessed, axis = 0)
     cloud_preprocessed = np.flip(cloud_preprocessed, axis = 1)
-    #print(cloud_preprocessed.shape)
-    #print(cloud_preprocessed.shape)
     
     cloud = []
     for i in range(len(cloud_preprocessed)):
@@ -114,7 +110,6 @@ def numpy_to_text(array):
         #replacement.replace(" ", ",")
         #replacement = replacement.replace(". ", ",")
         #replacement = replacement.replace(".", "")
-        #print(replacement)
         replacement = ""
         nums = []
         for j in i:
@@ -606,14 +601,11 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
     for angle_index in range(len(angle_gap_means)): #Iterate through each angle and get z score for its gap.
         #Get scalar value representing the gap
         angle_gap = scalar_quaternion_gap(initial_data[1][initial_index][angle_index],final_data[1][final_index][angle_index])
-        
-        #print(str(angle_gap)  + " vs " + str(angle_gap_means[angle_index]))
-        
+                
         #Calculate z score
         z_score_angle = (angle_gap-angle_gap_means[angle_index])/angle_gap_deviations[angle_index]
                 
         if(z_score_angle >= relative_angle_zscore_cutoff):
-            print(z_score_angle)
             angle_z_score_pass = False #z score exceeds cutoff, do not merge.
             break
 
@@ -622,9 +614,6 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
     angle_gap = scalar_quaternion_gap(initial_data[4][initial_index],final_data[4][final_index]) 
     #Calculate z score
     z_score_absolute_angle = (angle_gap-mean_head_angle)/standard_deviation_head_angle
-    
-    if(not angle_z_score_pass):
-        print("ANGLEWACK")
 
     return (z_score_head < head_zscore_cutoff and z_score_size < size_zscore_cutoff 
             and angle_z_score_pass and z_score_absolute_angle < absolute_angle_zscore_cutoff)
@@ -686,9 +675,6 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
                                 (angle_gap_means, angle_gap_deviations, secondary_z_score_cutoff_angle), 
                                 (mean_head_angle, standard_deviation_head_angle, secondary_z_score_cutoff_absolute_angle)):
             gap_indicators.append(i4)
-            print("GAP AT " + str(i4))
-        else:
-            print("NO GAP AT " + str(i4))
                 
     gap_indicators.append(len(head_gaps))# Mark final gap
     
@@ -725,8 +711,6 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
     #It identifies whether the maximum segments index is even or odd.
     max_index =  contious_segment_lengths.index(max(contious_segment_lengths))
     odd_or_even = max_index%2
-    print("HARHAR")
-    print(odd_or_even)
     
     """
     This loop identifies whether the gaps between each segment are caused by a camera-jump or a brief/fill-innable error.
@@ -769,8 +753,6 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
                     indexes_to_fill_in.append(segment)
                 else:
                     indexes_to_split.append(segment)
-                    print("SPLITTING OFF")
-                    print(segment)
                     loop_current_parity += 1 #Swap the parity being checked.
                 
     
@@ -1068,7 +1050,6 @@ def remove_short_clips(data, minimum_allowable_length):
         
         if (len(current_clip[0]) < minimum_allowable_length):
             marked_for_removal.append(i3)
-            #print(len(current_clip[0]))
     
     """
     remove the too short clips.
@@ -1217,7 +1198,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             
                 sum_3d = sum_3d + np.sqrt(np.sum(np.square(vector_3D))) #Add 3d distance to 3d sum
                 sum_2d = sum_2d + np.sqrt(np.sum(np.square(vector_2D))) #Add 2d distance to 2d sum
-                #print(np.sqrt(np.sum(np.square(vector_2D)))/np.sqrt(np.sum(np.square(vector_3D))))
 
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
