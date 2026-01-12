@@ -18,17 +18,16 @@ frame_dividor = 3
 def convert_directory(image_directory, depth_directory, video_name):
     to_return = []
     num_frames = len(os.listdir(image_directory))
+    depth_frames = np.load(depth_directory)
     for i in range(num_frames):
-        image_frame = (image_directory+"/"+video_name+"_frame" + str(i) + ".jpg")
-        depth_frame = (depth_directory+"/"+video_name+"_frame" + str(i) + ".npy")
+        image_frame = os.path.join(image_directory, (video_name + "_frame" + str(i) + ".jpg"))
+        depth_frame = depth_frames[i]
         frame = convert_to_pointcloud(image_frame,depth_frame)
         to_return.append(frame)
     to_return = np.stack(to_return)
     return to_return
 
 def convert_to_pointcloud(image, depth):
-    
-
     image = cv2.imread(image, cv2.IMREAD_COLOR)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255.0
     image = cv2.resize(image, (320, 240))
@@ -36,7 +35,6 @@ def convert_to_pointcloud(image, depth):
     #print(image.shape)
 
 
-    depth = np.load(depth)
     depth = np.transpose(depth, (1, 2, 0))
     depth = cv2.resize(depth, (320, 240))
     depth = np.expand_dims(depth, axis = 2)
@@ -82,7 +80,7 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
     array[:, 1] = direction_vectors[:, 1] * magnitudes
 
     """
-    OLD, less optimized spread code. Runs at about half the speed based on a brief test (covered 7 videos in 2 minutes as opposed to 14)
+    OLD, less optimized spread code. Makes whole program run at about half the speed based on a brief test (covered 7 videos in 2 minutes as opposed to 14)
     for point in array:
         magnitude = np.sqrt(np.sum(np.square(np.array([(point[0]-height_middle), (point[1]-width_middle), point[2]]))))
         direction_vector = np.array([point[0],point[1],0])-np.array([height_middle,width_middle,POVDepth])
@@ -135,7 +133,7 @@ minimum_video_frames = 20 #discard all data clips that are below this frame leng
 fill_in_cutoff = 5 #Attempt to Fill in all gaps of this length or lower.
 def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clouds, video_name):
     """
-    load skseleton data from file
+    load skeleton data from file
     """
     skeleton_frames_2d = np.load(skeleton_file_2d)
     skeleton_frames_3d = np.load(skeleton_file_3d)
@@ -154,6 +152,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
     """
     Iterate over the frames to check which are faulty, and get the depths for each frame
     """
+    preprocessed_depth_frames = np.load(depth_directory)
     depth_frames = []
     faulty_frames = []
     for i in range(num_frames):
@@ -163,9 +162,9 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
             faulty_frames.append(i)
         
         #Copypasted from pointcloud functions, use this to get depth for frame
-        depth_frame = (depth_directory+ "/" + video_name + "_frame" + str(i) + ".npy")
-
-        depth_frame = np.load(depth_frame)
+        #From what I am recognizing updating the code 2026/1/11 this is redundant,
+        #but not currently working to optimize this just working to make it so it can run be run by another person.
+        depth_frame = preprocessed_depth_frames[i]
         depth_frame = np.transpose(depth_frame, (1, 2, 0))
         depth_frame = cv2.resize(depth_frame, (320, 240))
         depth_frame = np.expand_dims(depth_frame, axis = 2)
@@ -176,7 +175,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         depth_frame = np.flip(depth_frame, axis = 1)
 
         depth_frames.append(depth_frame)
-    
+
     depth_frames = np.stack(depth_frames)
     
     """
@@ -214,7 +213,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                     current_frame_faulty = True
                     num_previous_faulty_frames += 1
                     break
-            if current_frame_faulty: #Frame was marked faulty in the loop, so move on to the next frame 
+            if current_frame_faulty: #Frame was marked faulty in the loop, so move on to the next frame
                 continue
             
             """
@@ -279,12 +278,13 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         data, head_data, pose_data, angle_data, head_angle_data = seal_nicks(data, clip_gaps, fill_in_cutoff)
     else:
         return []
-    
+
     """
     Remove too-short clips
     """
     data = remove_short_clips(data, minimum_video_frames)
     
+
     """
     process clips for errors.
     
@@ -296,7 +296,8 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
         clips = process_clip(clip, fill_in_cutoff, head_data, pose_data, angle_data, head_angle_data)
         processed_data = processed_data + clips
     data = processed_data
-    
+
+
     """
     Remove too-short clips again.
     """
@@ -548,12 +549,13 @@ Returns a scalar value representing the "magnitude" of a difference between two 
 def scalar_quaternion_gap(quaternion1, quaternion2):
     intermediate_quaternion = quaternion_between_quaternions(quaternion1,quaternion2)
 
-    change_value = abs(intermediate_quaternion[3]-1) #Subtract 1 from W and get absolute value to get value that represents change in angle.
+    change_value = R.from_quat(intermediate_quaternion).magnitude()
     
     return change_value
 
 """
 #Calculates the standard deviation and mean for a list of numbers
+If one item, return number and 0
 """
 def deviations_and_mean(numbers_list):
     #Calculate the mean
@@ -563,8 +565,11 @@ def deviations_and_mean(numbers_list):
     sum_for_deviation = 0
     for i3 in numbers_list:
         sum_for_deviation = sum_for_deviation+((i3-mean)**2)
-    
+
+    if(len(numbers_list) == 1):
+        return mean, 0    
     deviation = (sum_for_deviation/(len(numbers_list)-1))**0.5
+
     
     return mean, deviation #Return
 
@@ -601,10 +606,14 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
     for angle_index in range(len(angle_gap_means)): #Iterate through each angle and get z score for its gap.
         #Get scalar value representing the gap
         angle_gap = scalar_quaternion_gap(initial_data[1][initial_index][angle_index],final_data[1][final_index][angle_index])
+        
+        #print(str(angle_gap)  + " vs " + str(angle_gap_means[angle_index]))
+        
         #Calculate z score
         z_score_angle = (angle_gap-angle_gap_means[angle_index])/angle_gap_deviations[angle_index]
                 
         if(z_score_angle >= relative_angle_zscore_cutoff):
+            print(z_score_angle)
             angle_z_score_pass = False #z score exceeds cutoff, do not merge.
             break
 
@@ -613,6 +622,9 @@ def fill_in_zscore_check(initial_data, final_data, initial_index, final_index, h
     angle_gap = scalar_quaternion_gap(initial_data[4][initial_index],final_data[4][final_index]) 
     #Calculate z score
     z_score_absolute_angle = (angle_gap-mean_head_angle)/standard_deviation_head_angle
+    
+    if(not angle_z_score_pass):
+        print("ANGLEWACK")
 
     return (z_score_head < head_zscore_cutoff and z_score_size < size_zscore_cutoff 
             and angle_z_score_pass and z_score_absolute_angle < absolute_angle_zscore_cutoff)
@@ -674,6 +686,9 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
                                 (angle_gap_means, angle_gap_deviations, secondary_z_score_cutoff_angle), 
                                 (mean_head_angle, standard_deviation_head_angle, secondary_z_score_cutoff_absolute_angle)):
             gap_indicators.append(i4)
+            print("GAP AT " + str(i4))
+        else:
+            print("NO GAP AT " + str(i4))
                 
     gap_indicators.append(len(head_gaps))# Mark final gap
     
@@ -709,7 +724,9 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
     #This gets +1 for odd indexes and 0 for even indexes
     #It identifies whether the maximum segments index is even or odd.
     max_index =  contious_segment_lengths.index(max(contious_segment_lengths))
-    odd_or_even = max_index%2 
+    odd_or_even = max_index%2
+    print("HARHAR")
+    print(odd_or_even)
     
     """
     This loop identifies whether the gaps between each segment are caused by a camera-jump or a brief/fill-innable error.
@@ -752,6 +769,8 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
                     indexes_to_fill_in.append(segment)
                 else:
                     indexes_to_split.append(segment)
+                    print("SPLITTING OFF")
+                    print(segment)
                     loop_current_parity += 1 #Swap the parity being checked.
                 
     
@@ -1533,34 +1552,6 @@ def shift_to_head(pose_data_3d, pointcloud):
 
     return pose_data_3d, pointcloud
 
-
-"""
-Demonstration code:
-
-video = "50_FIRST_DATES_run_f_cm_np1_ba_med_12.avi"
-directory_end = "run/" + video
-
-image_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images/" + directory_end
-depth_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Depths/" + directory_end
-pose_data_2d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/2D/" + directory_end + ".npy"
-pose_data_3d = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations/3D/" + directory_end + ".npy"
-array = convert_directory(image_directory, depth_directory,video)
-
-data = process_data(pose_data_2d,pose_data_3d,depth_directory,array,video);
-
-
-pointcloud_stringmade = numpy_vid_to_text(data[0][2])
-points_3d_stringmade = numpy_vid_to_text(data[0][0])
-angles_3d_stringmade = numpy_vid_to_text(data[0][1])
-
-with open("pointclouds.txt", "w") as text_file:
-    text_file.write(pointcloud_stringmade)
-with open("points.txt", "w") as text_file:
-    text_file.write(points_3d_stringmade)
-with open("angles.txt", "w") as text_file:
-    text_file.write(angles_3d_stringmade)
-"""
-
 """
 Copied the below codee from Video_Frame_Extractor.py and modified it. 
 
@@ -1570,8 +1561,14 @@ into whatever is set as the current directory for the program, and you can feed 
 into the function as input. 
 """
 
-def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/"):
-    covered_list_file = dataset_directory + "PointCloudsCoveredList.txt"
+def from_data_iterator():
+    homeDirectory = os.getcwd()
+    covered_list_file = os.path.join(homeDirectory, "PointCloudsCoveredList.txt")
+    if not os.path.exists(covered_list_file):
+        with open(covered_list_file, "w"):
+            pass #Make covered list if it does not exist already.
+
+
     #Yoinked these from google to save time.
     def add_to_covered_list(covered):
         try: 
@@ -1584,12 +1581,12 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
              data = fp.read() 
              return to_check in data     
 
-    inputDirectory = dataset_directory + "Dataset Extracted Images" 
-    depthDirectory = dataset_directory + "Dataset Extracted Depths"
-    poseData2D_Directory = dataset_directory + "Dataset Pose Estimations/2D/"
-    poseData3D_Directory = dataset_directory + "Dataset Pose Estimations/3D/"
+    inputDirectory = os.path.join(homeDirectory, "extracted_images") 
+    depthDirectory = os.path.join(homeDirectory, "estimated_depths")
+    poseData2D_Directory = os.path.join(homeDirectory,"estimated_poses","2D")
+    poseData3D_Directory = os.path.join(homeDirectory,"estimated_poses","3D")
 
-    outputDirectory = dataset_directory + "Dataset Extracted Point Clouds" 
+    outputDirectory = os.path.join(homeDirectory, "outputted_pointclouds") 
 
     quality_filter_keywords = ["_med_", "_goo_"] #Requires these words be in the file in order to bother saving it
 
@@ -1597,20 +1594,21 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
     os.chdir(inputDirectory) #First, go to the input directory and get its members
     actions = os.listdir() #got its members (and in HMDB51 also corresponds to main action)
 
-
+    if(not os.path.exists(outputDirectory)):
+        os.makedirs(outputDirectory) #Create action output directory if it does not exist
     os.chdir(outputDirectory) #now, create corresponding output directories for each action
     for action in actions: 
-        action_path = outputDirectory + "/" + action
+        action_path = os.path.join(outputDirectory, action)
         if(not os.path.exists(action_path)):
             os.makedirs(action_path) #Create action output directory if it does not exist
 
 
     for action in actions: #now that we have created the nessecary directories, we can extract the images into them
-        os.chdir(inputDirectory + "/" + action)
+        os.chdir(os.path.join(inputDirectory, action))
         videos = os.listdir() #get a list of the input videos.
     
     
-        action_output_directory = (outputDirectory + "/" + action)
+        action_output_directory = os.path.join(outputDirectory, action)
         os.chdir(action_output_directory) #return to output directory for action
 
         skip_occured = False
@@ -1626,16 +1624,16 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
                     bother_with_video=True
                 
 
-            to_check = action_output_directory + "/" + video
+            to_check = os.path.join(action_output_directory, video)
             
             """
             This bit of code is usefuk to uncomment if you are redoing data collection and you want to make sure clips that are known
             to not make it past filters are discarded, run it over the old data.
-            if(not os.path.exists((to_check + "_clip_0/pointcloud.npy"))):
-                add_to_covered_list(to_check)
+            if(not os.path.exists(os.path.join(to_check, "_clip_0", "pointcloud.npy"))):
+                add_to_covered_list(to_check)            
             """
-            
-            if(os.path.exists((to_check + "_clip_0/pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
+
+            if(os.path.exists(os.path.join(to_check, "_clip_0", "pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
                 skip_occured = True
                 skips = skips + 1
                 continue
@@ -1647,20 +1645,20 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
                 skip_occured = False
 
             if bother_with_video:
-                depth_location = depthDirectory +"/" + action + "/" + video
-                image_location = inputDirectory +"/" + action + "/" + video
-                pose_data_2d = poseData2D_Directory +"/" + action + "/" + video + ".npy"
-                pose_data_3d = poseData3D_Directory +"/" + action + "/" + video +  ".npy"
+                depth_location = os.path.join(depthDirectory,action, (video + ".npy"))
+                image_location = os.path.join(inputDirectory,action,video)
+                pose_data_2d = os.path.join(poseData2D_Directory, action, (video + ".npy"))
+                pose_data_3d = os.path.join(poseData3D_Directory, action, (video + ".npy"))
         
                 try:
                     point_clouds = convert_directory(image_location,depth_location,video)
                 except Exception:
-                    print("Error occurred in creating pointcloud for " + action + "/" + video + ", skipping.")
+                    print("Error occurred in creating pointcloud for " + os.path.join(action, video) + ", skipping.")
                     continue #Added this because sometimes (very rare) the depth extractor does 1 less frame than the image extractor.
                 data = process_data(pose_data_2d,pose_data_3d,depth_location,point_clouds,video)
         
                 for i in range(len(data)):
-                    target_location = action_output_directory + "/" + video + "_clip_" + str(i)
+                    target_location = os.path.join(action_output_directory, (video + "_clip_" + str(i)))
 
                     if(not os.path.exists(target_location)):
                         os.makedirs(target_location) #Create action output directory if it does not exist
@@ -1669,9 +1667,9 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
                     to_save_3D_angle = data[i][1]
                     to_save_pointcloud = data[i][2]
                 
-                    np.save((target_location+"/skeleton_points"),to_save_3D_pose)
-                    np.save((target_location+"/skeleton_angles"),to_save_3D_angle)
-                    np.save((target_location+"/pointcloud"),to_save_pointcloud)
+                    np.save(os.path.join(target_location,"skeleton_points"),to_save_3D_pose)
+                    np.save(os.path.join(target_location,"skeleton_angles"),to_save_3D_angle)
+                    np.save(os.path.join(target_location,"pointcloud"),to_save_pointcloud)
                 
                     clips_saved += 1
                 videos_covered += 1
@@ -1683,9 +1681,9 @@ def from_data_iterator(dataset_directory = "/mnt/e/ML-Training-Data/HMDB51/Datas
     
 def pointcloud_video_totext(inp_directory, out_directory = os.getcwd()):
     
-    pointclouds = np.load((inp_directory + "/pointcloud.npy"))
-    pose_points = np.load((inp_directory + "/skeleton_points.npy"))
-    angles = np.load((inp_directory + "/skeleton_angles.npy"))
+    pointclouds = np.load(os.path.join(inp_directory, "pointcloud.npy"))
+    pose_points = np.load(os.path.join(inp_directory, "skeleton_points.npy"))
+    angles = np.load(os.path.join(inp_directory, "skeleton_angles.npy"))
 
     pointcloud_stringmade = numpy_vid_to_text(pointclouds)
     points_3d_stringmade = numpy_vid_to_text(pose_points)
@@ -1703,13 +1701,13 @@ def pointcloud_video_totext(inp_directory, out_directory = os.getcwd()):
 """
 Can either have file create pointclouds from data, or convert those pointclouds into text files.
 
-If first argument is to_text, it will convert the specified PointCloudVideo directory (second argument) into text
-files outputted in the specified directory (third arguement). In this case 2 arguments are required or will raise an
+If there is an arguement, it will convert the specified PointCloudVideo directory (first argument) into text
+files outputted in the specified directory (second arguement). In this case at least one argument is required or will raise an
 error. Third arguement is optional as it is assumed to be current directory if unspecified.
 
-If first arguement is anything else it will run the data iterator to convert depth, pose, and image data into
-pointclouds. If the first arguement is blank it will assume the dataset is at its default location, if it is not blank
-it will use the first arguement as the location for the dataset. 
+If no arguements are entered it will run the data iterator to convert depth, pose, and image data into
+pointclouds (assumes you ran Video_Frame_Extractor.py, Depth_Frame_Extractor.py, and mmpose_extractor_3d.py first
+in this same working directory, uses their output folders).
 
 """
 args = sys.argv[1:]
@@ -1718,17 +1716,12 @@ if(len(args)==0):
     print()
     from_data_iterator()
     exit()
-if(args[0] == "to_text"):
-    if(len(args) < 2):
-        raise Exception("to_text requires at least 2 additional arguements for PointCloudVideo input directory and output location.")
-    else:
-        if(len(args) == 2):
-            pointcloud_video_totext(args[1])
-        else:
-            pointcloud_video_totext(args[1], args[2])
-    exit()
 else:
-    print("Making point clouds from depth, pose, and image data")
-    print()
-    from_data_iterator(args[0])
+    if(len(args) < 1):
+        raise Exception("to_text requires at least one arguement for PointCloudVideo input directory.")
+    else:
+        if(len(args) == 1):
+            pointcloud_video_totext(args[0])
+        else:
+            pointcloud_video_totext(args[0], args[1])
     exit()

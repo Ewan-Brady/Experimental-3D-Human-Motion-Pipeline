@@ -16,23 +16,12 @@ from mmpose.apis import MMPoseInferencer
 import os
 import numpy as np
 import cv2
+import sys
 
 confidence_threshhold = 0.8 #discard results below this level of confidence
 
 bodypart_confidence_threshhold = 0.5
 required_portion_body_parts = 15/17
-
-#Old args
-mmpose_path = "/mnt/c/AI_model/3DMovementModel/Video Pose Estimator/mmpose/"
-
-config = mmpose_path+"td-hm_hrnet-w48_8xb32-210e_coco-256x192.py"
-checkpoint = mmpose_path+"td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth"
-device = "cuda:0"
-
-#img = mmpose_path+"tests/data/coco/000000000785.jpg"
-
-inputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Extracted Images" #The absolute directory where the image video frames are stored
-outputDirectory = "/mnt/e/ML-Training-Data/HMDB51/Dataset/Dataset Pose Estimations" #The absolute directory where the skeleton estimations should be outputted.
 
 def extract_2d_frames(model, frames_folder_2d):
     to_return_to = os.getcwd() #for later use
@@ -162,6 +151,32 @@ def extract_3d_frames(inferencer, img_path):
 
 
 def main():
+    args = sys.argv[1:]
+    if(len(args) == 0):
+        print("Pose estimator needs mmpose's absolute directory as an arguement.")
+        exit()
+    elif (len(args) > 1):
+        print("Pose estimator ignoring additional/extra arguements.")
+
+    #Old args
+    mmpose_path = args[0]
+
+    config = os.path.join(mmpose_path,"td-hm_hrnet-w48_8xb32-210e_coco-256x192.py")
+    checkpoint = os.path.join(mmpose_path,"td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth")
+    device = "cuda:0"
+
+    #img = mmpose_path+"tests/data/coco/000000000785.jpg"
+
+    inputDirectory = os.path.join(os.getcwd(), "extracted_images") #The absolute directory where the image video frames are stored
+    outputDirectory = os.path.join(os.getcwd(), "estimated_poses") #The absolute directory where the skeleton estimations are outputted.
+    if(not os.path.exists(outputDirectory)):
+            os.makedirs(outputDirectory) #Create output directory if it does not exist
+
+    if(not os.path.isdir(inputDirectory)):
+        print("Pose estimator missing input images.") #Check input directory exists before bothering with anything.
+        print(inputDirectory)
+        sys.exit(-1)
+
     # build the model from a config file and a checkpoint file
     cfg_options = None
 
@@ -175,18 +190,19 @@ def main():
         cfg_options=cfg_options)
     
     os.chdir(inputDirectory)
-    actions = os.listdir()
+    actions = os.listdir() #Get actions.
     os.chdir(outputDirectory) #now, create corresponding output directories for each action
     for action in actions: 
-        action_path_2d = outputDirectory + "/2D/" + action
-        action_path_3d = outputDirectory + "/3D/" + action
+        action_path_2d = os.path.join(outputDirectory, "2D", action)
+        action_path_3d = os.path.join(outputDirectory, "3D", action)
         if(not os.path.exists(action_path_2d)):
             os.makedirs(action_path_2d) #Create action output directory if it does not exist
         if(not os.path.exists(action_path_3d)):
             os.makedirs(action_path_3d) #Create action output directory if it does not exist
 
+    print("pose estimator running...")
     for action in actions:
-        action_directory = inputDirectory + "/" + action
+        action_directory = os.path.join(inputDirectory,action)
         os.chdir(action_directory)
         frame_folders = os.listdir() #get a list of the input image folders.
         
@@ -194,9 +210,9 @@ def main():
         skips = 0
         videos_covered = 0
         for folder in frame_folders:
-            frame_folder = action_directory+"/"+folder
-            target_location_3D = outputDirectory + "/3D/" + action + "/"  + folder
-            target_location_2D = outputDirectory + "/2D/" + action + "/"  + folder
+            frame_folder = os.path.join(action_directory,folder)
+            target_location_3D = os.path.join(outputDirectory,"3D",action,folder)
+            target_location_2D = os.path.join(outputDirectory,"2D",action,folder)
 
             if(os.path.exists((target_location_3D+".npy")) and os.path.exists((target_location_2D+".npy"))): #Skips finished files to resume.
                 skip_occured = True
@@ -218,10 +234,7 @@ def main():
             videos_covered = videos_covered+1
         
             
-        print(action + " done...")
-        #with open(target_location, "w") as imagefile:
-        #    imagefile.write(str(keypoint_frames)) #Writes skeletondata frames to file, pretty simple format but can be decoded so it works.
-            
+        print(action + " done...")            
 
 if __name__ == '__main__':
     main()
