@@ -1685,16 +1685,16 @@ If the first arguement is --to_text, it will convert the specified PointCloudVid
 files outputted in the specified directory (third arguement). In this case at least two arguments are required it will raise an
 error. Third arguement is optional as it is assumed to be current directory if unspecified.
 
-If any single arguement other than --to_text is is entered it will run the conversion of pose data, depths, and images
-to point clouds with pose data. (assumes you ran Video_Frame_Extractor.py, Depth_Frame_Extractor.py, and mmpose_extractor_3d.py 
-first in this same working directory, uses their output folders).
+If any first arguement other than --to_text is is entered it will run the conversion of pose data, depths, and images
+to point clouds with pose data. First arguement will be input directory, second is output directory (assumes output of Video_Frame_Extractor.py, 
+Depth_Frame_Extractor.py, and mmpose_extractor_3d.py is in input directory, uses their output folders).
 
 """
 args = sys.argv[1:]
 if(args[0] != "--to_text"):
     print("Making point clouds from depth, pose, and image data")
     print()
-    from_data_iterator(args[0])
+    from_data_iterator(args[0], args[1])
     exit()
 else:
     if(len(args) < 2):
