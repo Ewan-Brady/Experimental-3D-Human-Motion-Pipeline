@@ -1541,8 +1541,8 @@ into whatever is set as the current directory for the program, and you can feed 
 into the function as input. 
 """
 
-def from_data_iterator():
-    homeDirectory = os.getcwd()
+def from_data_iterator(inputs_directory, output_directory):
+    homeDirectory = inputs_directory
     covered_list_file = os.path.join(homeDirectory, "PointCloudsCoveredList.txt")
     if not os.path.exists(covered_list_file):
         with open(covered_list_file, "w"):
@@ -1566,7 +1566,7 @@ def from_data_iterator():
     poseData2D_Directory = os.path.join(homeDirectory,"estimated_poses","2D")
     poseData3D_Directory = os.path.join(homeDirectory,"estimated_poses","3D")
 
-    outputDirectory = os.path.join(homeDirectory, "outputted_pointclouds") 
+    outputDirectory = os.path.join(output_directory, "outputted_pointclouds") 
 
     quality_filter_keywords = ["_med_", "_goo_"] #Requires these words be in the file in order to bother saving it
 
@@ -1681,27 +1681,27 @@ def pointcloud_video_totext(inp_directory, out_directory = os.getcwd()):
 """
 Can either have file create pointclouds from data, or convert those pointclouds into text files.
 
-If there is an arguement, it will convert the specified PointCloudVideo directory (first argument) into text
-files outputted in the specified directory (second arguement). In this case at least one argument is required or will raise an
+If the first arguement is --to_text, it will convert the specified PointCloudVideo directory (second argument) into text
+files outputted in the specified directory (third arguement). In this case at least two arguments are required it will raise an
 error. Third arguement is optional as it is assumed to be current directory if unspecified.
 
-If no arguements are entered it will run the data iterator to convert depth, pose, and image data into
-pointclouds (assumes you ran Video_Frame_Extractor.py, Depth_Frame_Extractor.py, and mmpose_extractor_3d.py first
-in this same working directory, uses their output folders).
+If any single arguement other than --to_text is is entered it will run the conversion of pose data, depths, and images
+to point clouds with pose data. (assumes you ran Video_Frame_Extractor.py, Depth_Frame_Extractor.py, and mmpose_extractor_3d.py 
+first in this same working directory, uses their output folders).
 
 """
 args = sys.argv[1:]
-if(len(args)==0):
+if(args[0] != "--to_text"):
     print("Making point clouds from depth, pose, and image data")
     print()
-    from_data_iterator()
+    from_data_iterator(args[0])
     exit()
 else:
-    if(len(args) < 1):
+    if(len(args) < 2):
         raise Exception("to_text requires at least one arguement for PointCloudVideo input directory.")
     else:
         if(len(args) == 1):
-            pointcloud_video_totext(args[0])
+            pointcloud_video_totext(args[1])
         else:
-            pointcloud_video_totext(args[0], args[1])
+            pointcloud_video_totext(args[1], args[2])
     exit()
