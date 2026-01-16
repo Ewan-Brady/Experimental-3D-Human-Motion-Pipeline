@@ -41,27 +41,18 @@ individual is which and only stores one set of pose data any frames with two peo
 
 # Installation and Dependencies
 ## Libraries to install (program works with these versions, others your milage may vary)
-cuda-version==11.8 (may need to install this cuda version on your computer as well not just this library, not completely sure, think its on my computer).
-
-torch==2.0.0 (from https://download.pytorch.org/whl/cu118)
-
-torchvision==0.15.1 (from https://download.pytorch.org/whl/cu118)
-
-openmim
-
-mmengine==0.10.4 (use mim install)
-
-mmcv<2.1.0 (use mim install)
-
-mmdet==3.1.0 (use mim install)
-
-https://github.com/mattloper/chumpy.git (chumpy should be automatically installed with mmpose but it does not, [due to this issue here](https://github.com/mattloper/chumpy/issues/56), so need to install via git link)
-
-mmpose>=1.3.1
-
-numpy==1.24.3 (Install after the above libraries, or they will attempt to overwrite it with a later version which then causes mmpose to not work.)
-
-huggingface_hub
+I advise installing these in the listed order as follows, since that is what worked for me:
+* cuda-version==11.8 (may need to install this cuda version on your computer as well not just this library, not completely sure, think its on my computer).
+* torch==2.0.0 (from https://download.pytorch.org/whl/cu118)
+* torchvision==0.15.1 (from https://download.pytorch.org/whl/cu118)
+* openmim
+* mmengine==0.10.4 (use mim install)
+* mmcv<2.1.0 (use mim install)
+* mmdet==3.1.0 (use mim install)
+* https://github.com/mattloper/chumpy.git (chumpy should be automatically installed with mmpose but it does not, [due to this issue here](https://github.com/mattloper/chumpy/issues/56), so need to install via git link)
+* mmpose>=1.3.1
+* numpy==1.24.3 (Install after the above libraries, or they will attempt to overwrite it with a later version which then causes mmpose to not work.)
+* huggingface_hub
 
 ## Models to download
 Run this command in whatever folder you want to store the mmpose coco model in, once the above libraries are downloaded:
