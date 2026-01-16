@@ -27,6 +27,7 @@ which included but was not limited to:
 * The head would be moved up to 10 pixels in 2D space to be at the closest pixel to the camera (head is often in the foreground relative to surroundings, reduces rate head is incorrectly placed in the background)
 * Checking if any part of the pose was further than the mean distance for the pixels from the camera (if any is, usually means incorrectly placed in the background).
 
+
   First a pass-over would be done removing frames that are determined to definetly faulty rather than point of view changes (ex. impossible joint orientations). Depending on the size of the gap the video would be split into two separate videos
 or if the gap was short enough it would be "filled in" by an estimation of what occurs. This filling in would occur if only a few frames were missing, and it would be done by taking the initial vectors and final vectors of the limbs, then using slerp
 and linear interpolation to estimate the intermediate limb positions and scales respectivly (i.e. vector direction and magnitude). After this passover, any clips that are too short to bother saving would be discarded before a second pass over is then
