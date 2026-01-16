@@ -40,9 +40,27 @@ producing any final saved clips. The program was designed to run where the fully
 individual is which and only stores one set of pose data any frames with two people in them are marked as faulty. Theoretically these issues are solvable, but I did not do so for this proof of concept. 
 
 # Installation and Dependencies
+## Libraries to install (program works with these versions, others your milage may vary)
+cuda-version==11.8 (may need to install this cuda version on your computer as well not just this library, not completely sure, think its on my computer).
+torch==2.0.0 (from https://download.pytorch.org/whl/cu118)
+torchvision==0.15.1 (from https://download.pytorch.org/whl/cu118)
+openmim
+mmengine==0.10.4 (use mim install)
+mmcv<2.1.0 (use mim install)
+mmdet==3.1.0 (use mim install)
+https://github.com/mattloper/chumpy.git (chumpy should be automatically installed with mmpose but it does not, [due to this issue here](https://github.com/mattloper/chumpy/issues/56), so need to install via git link)
+mmpose>=1.3.1
+numpy==1.24.3 (Install after the above libraries, or they will attempt to overwrite it with a later version which then causes mmpose to not work.)
+huggingface_hub
 
-IN PROGRESS
+## Models to download
+Run this command in whatever folder you want to store the mmpose coco model in, once the above libraries are downloaded:
+mim download mmpose --config td-hm_hrnet-w48_8xb32-210e_coco-256x192  --dest .
+It will download two files. Do not rename these files, and remember where you stored them. You can move them to a new location as long as you remember where you stored them, keep them together, and dont rename them.
+You will need their file location to run the program.
+
+Then download the Depth-Anything model (just download [this repo](https://github.com/LiheYoung/Depth-Anything)) and save the location where you downloaded it (including the Depth-Anything folder itself). You will
+need this file location to run the program.
 
 # How to use
-
 IN PROGRESS
