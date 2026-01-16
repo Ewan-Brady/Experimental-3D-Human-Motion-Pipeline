@@ -1,8 +1,7 @@
 # Background
   I created this project in the summer after my first year of university as a experimental proof-of-concept, but it was originally only for myself so I did not think to make it public on github. 
 I have since cleaned it up a bit for public posting (removing hard-coded file directories and replacing them with command line arguements, making this readme and dependencies list, removing some
-of the commented out code, and making the pipeline runner that runs all of the programs), but otherwise the code remains largely the same as after my first year. Because of this, the code may not
-be as functional or clean as code I would make in the present.
+of the commented out code, and making the pipeline runner that runs all of the programs), but otherwise the code remains largely the same as after my first year. Because of this, the code is not as functional or clean as code I would make in the present.
 
 # Longer Explanation of the Project
   The initial goal was to create a program that takes an initial 3D point cloud and the position of an individuals limbs, and then use a form of video generation AI to extrapolate the movements needed to 
