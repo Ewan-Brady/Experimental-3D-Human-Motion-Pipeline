@@ -63,4 +63,21 @@ Then download the Depth-Anything model (just download [this repo](https://github
 need this file location to run the program.
 
 # How to use
+## Running the whole pipeline
+To run the whole pipeline you will need the absolute input directory where the dataset is on your computer, the absolute directory where Depth-Anything is (including the Depth-Anything folder in the directory), and the absolute directory where the config and checkpoint files for the mmpose model are stored. Do not use relative directories, use absolute directories. The directory with the unzipped HMDB51 must only contain folders full of videos (i.e. each folder is full of videos of people doing a specific thing, as in the HMDB51 dataset. So there might be a folder called "run" with people running, and a folder called "walk" with people walking, both inside the input directory). Once you have these, the pipeline runner can be ran as follows:
+
+python3 Pipeline_Runner.py <input-directory> <Depth-Anything-directory> <mmpose-model-directory>
+
+This will run the various pipeline componenets one after the other in series, with each step going over the whole data set. This will take a while for any significant number of videos, so you might want something to do in the meantime. Note this may also take some space on
+your computer, depending on how much video you gave it as input. (Note: I am aware it would be more convenient to run each step of the pipeline on one video, then repeat for the next video, and so on, but the program was not originally designed that way and it would take a
+somewhat significant overhaul to change this. I am keeping the code largely as it was when I worked on it after first year). Some of the steps of the pipeline will skip over already finished videos, so if you want it to redo those videos you should delete the contents
+of, extracted_depths, extracted_poses, and PointCloudsCoveredList.txt depending on what step of the pipeline you want redone from scratch. 
+
+## Creating a text file from a stored clip
+IN PROGRESS
+
+## Visualizing a clip from the text file
+IN PROGRESS
+
+## Running individual parts
 IN PROGRESS
