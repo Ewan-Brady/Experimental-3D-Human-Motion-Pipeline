@@ -15,6 +15,7 @@ which do not work for this purpose, such as videos with no people in them, video
 * [Depth Anything](https://github.com/LiheYoung/Depth-Anything) was used to get the distance of each pixel from the camera.
 * [MMPose](https://github.com/open-mmlab/mmpose) was used to get which pixels each limb was located at (using 2D pose estimation), and was used to get the 3D orientation of limbs to eachother (using 3D pose estimation). For both use cases, the demo coco model was used.
 
+
   The distance of each pixel from the camera was used to make a point cloud from the pixels. The 2D positions of the individuals's head (from the 2D pose estiamtion) was used to determine the individuals position in the point cloud.
 The distance of the individuals pose points were used to determine the scale of the individual in the cloud. The individual's scale and head position were then used to place the 3D pose of the individual at a roughly correct scale and position
 in the point cloud. This is then done for each frame to create a 3D video.
