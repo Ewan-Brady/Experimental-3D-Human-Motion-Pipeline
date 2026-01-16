@@ -40,8 +40,8 @@ producing any final saved clips. The program was designed to run where the fully
 individual is which and only stores one set of pose data any frames with two people in them are marked as faulty. Theoretically these issues are solvable, but I did not do so for this proof of concept. 
 
 # Installation and Dependencies
-## Libraries to install (program works with these versions, others your milage may vary)
-I advise installing these in the listed order as follows, since that is what worked for me:
+## Libraries to install
+These are the versions of the libraries that worked for me, if you attempt to install them with other versions the program might work but your milage will vary. I advise installing these in the listed order as follows, since that is what worked for me:
 * cuda-version==11.8 (may need to install this cuda version on your computer as well not just this library, not completely sure, think its on my computer).
 * torch==2.0.0 (from https://download.pytorch.org/whl/cu118)
 * torchvision==0.15.1 (from https://download.pytorch.org/whl/cu118)
