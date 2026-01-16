@@ -73,11 +73,19 @@ your computer, depending on how much video you gave it as input. (Note: I am awa
 somewhat significant overhaul to change this. I am keeping the code largely as it was when I worked on it after first year). Some of the steps of the pipeline will skip over already finished videos, so if you want it to redo those videos you should delete the contents
 of, extracted_depths, extracted_poses, and PointCloudsCoveredList.txt depending on what step of the pipeline you want redone from scratch. 
 
-## Creating a text file from a stored clip
-IN PROGRESS
+## Creating text files from a stored clip
+To create text files from a stored clip, first find the location of the stored clip in the outputted pointclouds directory (it should be a folder containing three files: pointcloud.npy, skeleton_points.npy, and skeleton_angles.npy). Then using this directory, run PointCloudCreator.py program as follows:
+python3 PointCloudCreator.py --totext <absolute-location-of-stored-clip> <directory-to-output-text-files>
+If no third arguement is given, it will output the text files to the current working directory.
 
-## Visualizing a clip from the text file
-IN PROGRESS
+## Visualizing a clip from the text files
+To visualize the clip using the text files, you need the visualizer program. The visualizer program can be downloaded (NOT UP YET). When running the program, you then enter the absolute directories of the pointclouds, angles, and points text files into their respoective text boxes in the program, make sure the settings are what you want them to be, then click the load button.
 
 ## Running individual parts
-IN PROGRESS
+These are the commands to run the individual steps of the pipeline (remember, use absolute directories not relative):
+python3 Video_Frame_Extractor.py <input-directory>
+python3 mmpose_extractor_3d.py <mmpose-model-directory>
+python3 Depth_Frame_Extractor.py <input-directory> <Depth-Anything-directory>
+python3 PointCloudCreator.py
+
+Note mmpose_extractor_3d.py the outputs of Video_Frame_Extractor.py to use as its input, and PointCloudCreator.py requires the outputs of mmpose_extractor_3d.py and Depth_Frame_Extractor.py to use as it's input.
