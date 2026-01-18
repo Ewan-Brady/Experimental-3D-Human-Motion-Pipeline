@@ -64,7 +64,7 @@ need this file location to run the program.
 
 # How to use
 ## Running the whole pipeline
-To run the whole pipeline you will need the absolute input directory where the dataset is on your computer, an absolute directory you want it to place the output files of the various steps in, the absolute directory where Depth-Anything is (including the Depth-Anything folder in the directory), and the absolute directory where the config and checkpoint files for the mmpose model are stored. Do not use relative directories, use absolute directories. The directory with the unzipped HMDB51 must only contain folders full of videos (i.e. each folder is full of videos of people doing a specific thing, as in the HMDB51 dataset. So there might be a folder called "run" with people running, and a folder called "walk" with people walking, both inside the input directory). Once you have these, the pipeline runner can be ran as follows:
+To run the whole pipeline you will need the absolute input directory where the dataset is on your computer, an absolute directory you want it to place the output files of the various steps in, the absolute directory where Depth-Anything is (including the Depth-Anything folder in the directory), and the absolute directory where the config and checkpoint files for the mmpose model are stored. Do not use relative directories, use absolute directories. The directory with the unzipped HMDB51 must only contain folders full of videos (i.e. each folder is full of videos of people doing a specific thing, as in the HMDB51 dataset. So there might be a folder called "run" with people running, and a folder called "walk" with people walking, both inside the input directory). Once you have these, the pipeline runner (in the "Code" folder) can be ran as follows:
 
 python3 Pipeline_Runner.py input-directory outputs-directory Depth-Anything-directory mmpose-model-directory
 
@@ -79,7 +79,9 @@ python3 PointCloudCreator.py --totext absolute-location-of-stored-clip directory
 If no third arguement is given, it will output the text files to the current working directory.
 
 ## Visualizing a clip from the text files
-To visualize the clip using the text files, you need the visualizer program. The visualizer program can be downloaded (NOT UP YET). When running the program, you then enter the absolute directories of the pointclouds, angles, and points text files into their respoective text boxes in the program, make sure the settings are what you want them to be, then click the load button.
+To visualize the clip using the text files, you need to run the visualizer program (the .exe file in the "3DVideoVisualzer" folder). When running the program, you then enter the absolute directories of the pointclouds, angles, and points text files into their respective text boxes in the program, make sure the settings are what you want them to be, then click the load button. 
+
+Note that the visualizer was very quickly thrown together as a debug tool, so it can run quite slowly (I am aware that having each point cloud pixel loaded as a cube is not optimal). Additionally, note that once the video is loaded changes in the settings do not take effect until the next "frame" plays. I reccomend sticking with the default settings at first until you get an idea of what the different settings do.
 
 ## Running individual parts
 These are the commands to run the individual steps of the pipeline (remember, use absolute directories not relative):
@@ -88,4 +90,4 @@ These are the commands to run the individual steps of the pipeline (remember, us
 * python3 Depth_Frame_Extractor.py input-directory Depth-Anything-directory output-directory
 * python3 PointCloudCreator.py input-directory output-directory
 
-Note mmpose_extractor_3d.py needs the outputs of Video_Frame_Extractor.py in input/output-directory use as its input, and PointCloudCreator.py requires the outputs of mmpose_extractor_3d.py, Video_Frame_Extractor.py, and Depth_Frame_Extractor.py in input-directory to use as it's input.
+Note mmpose_extractor_3d.py needs the outputs of Video_Frame_Extractor.py in input/output-directory use as its input, and PointCloudCreator.py requires the outputs of mmpose_extractor_3d.py, Video_Frame_Extractor.py, and Depth_Frame_Extractor.py in input-directory to use as it's input. All of these code files are located in the "Code" folder.
