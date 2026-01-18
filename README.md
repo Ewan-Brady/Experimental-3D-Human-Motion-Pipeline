@@ -64,14 +64,14 @@ need this file location to run the program.
 
 # How to use
 ## Running the whole pipeline
-To run the whole pipeline you will need the absolute input directory where the dataset is on your computer, the absolute directory where Depth-Anything is (including the Depth-Anything folder in the directory), and the absolute directory where the config and checkpoint files for the mmpose model are stored. Do not use relative directories, use absolute directories. The directory with the unzipped HMDB51 must only contain folders full of videos (i.e. each folder is full of videos of people doing a specific thing, as in the HMDB51 dataset. So there might be a folder called "run" with people running, and a folder called "walk" with people walking, both inside the input directory). Once you have these, the pipeline runner can be ran as follows:
+To run the whole pipeline you will need the absolute input directory where the dataset is on your computer, an absolute directory you want it to place the output files of the various steps in, the absolute directory where Depth-Anything is (including the Depth-Anything folder in the directory), and the absolute directory where the config and checkpoint files for the mmpose model are stored. Do not use relative directories, use absolute directories. The directory with the unzipped HMDB51 must only contain folders full of videos (i.e. each folder is full of videos of people doing a specific thing, as in the HMDB51 dataset. So there might be a folder called "run" with people running, and a folder called "walk" with people walking, both inside the input directory). Once you have these, the pipeline runner can be ran as follows:
 
-python3 Pipeline_Runner.py <input-directory> <Depth-Anything-directory> <mmpose-model-directory>
+python3 Pipeline_Runner.py <input-directory> <outputs-directory> <Depth-Anything-directory> <mmpose-model-directory>
 
 This will run the various pipeline componenets one after the other in series, with each step going over the whole data set. This will take a while for any significant number of videos, so you might want something to do in the meantime. Note this may also take some space on
 your computer, depending on how much video you gave it as input. (Note: I am aware it would be more convenient to run each step of the pipeline on one video, then repeat for the next video, and so on, but the program was not originally designed that way and it would take a
 somewhat significant overhaul to change this. I am keeping the code largely as it was when I worked on it after first year). Some of the steps of the pipeline will skip over already finished videos, so if you want it to redo those videos you should delete the contents
-of, extracted_depths, extracted_poses, and PointCloudsCoveredList.txt depending on what step of the pipeline you want redone from scratch. 
+of, extracted_depths, extracted_poses, and PointCloudsCoveredList.txt in the outputs directory depending on what step of the pipeline you want redone from scratch. 
 
 ## Creating text files from a stored clip
 To create text files from a stored clip, first find the location of the stored clip in the outputted pointclouds directory (it should be a folder containing three files: pointcloud.npy, skeleton_points.npy, and skeleton_angles.npy). Then using this directory, run PointCloudCreator.py program as follows:
@@ -83,9 +83,9 @@ To visualize the clip using the text files, you need the visualizer program. The
 
 ## Running individual parts
 These are the commands to run the individual steps of the pipeline (remember, use absolute directories not relative):
-python3 Video_Frame_Extractor.py <input-directory>
-python3 mmpose_extractor_3d.py <mmpose-model-directory>
-python3 Depth_Frame_Extractor.py <input-directory> <Depth-Anything-directory>
-python3 PointCloudCreator.py
+python3 Video_Frame_Extractor.py <input-directory> <output-directory>
+python3 mmpose_extractor_3d.py <mmpose-model-directory> <input/output-directory>
+python3 Depth_Frame_Extractor.py <input-directory> <Depth-Anything-directory> <output-directory>
+python3 PointCloudCreator.py <input-directory> <output-directory>
 
-Note mmpose_extractor_3d.py the outputs of Video_Frame_Extractor.py to use as its input, and PointCloudCreator.py requires the outputs of mmpose_extractor_3d.py and Depth_Frame_Extractor.py to use as it's input.
+Note mmpose_extractor_3d.py needs the outputs of Video_Frame_Extractor.py in <input/output-directory> use as its input, and PointCloudCreator.py requires the outputs of mmpose_extractor_3d.py, Video_Frame_Extractor.py, and Depth_Frame_Extractor.py in <input-directory> to use as it's input.
