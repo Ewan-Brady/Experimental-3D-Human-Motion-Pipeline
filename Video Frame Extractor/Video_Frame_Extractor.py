@@ -45,14 +45,14 @@ into whatever is set as the current directory for the program, and you can feed 
 into the function as input. 
 """
 args = sys.argv[1:]
-if(len(args)==0):
-    print("Frame extractor needs absolute directory of extracted HMDB51 files as arguement.")
+if(len(args)<2):
+    print("Frame extractor needs absolute directory of extracted database files and absolute directory to create output folder in as arguements.")
     sys.exit(-1)
-elif (len(args)>1):
-    print("Frame extractor Ignoring additional/extra arguements.")
+elif (len(args)>2):
+    print("Frame extractor ignoring additional/extra arguements.")
 
 inputDirectory = args[0] #The absolute directory where the input video dataset is stored.
-homeDirectory = os.getcwd()
+homeDirectory = args[1]
 outputDirectory = os.path.join(homeDirectory, "extracted_images") #Spit out the images in a folder in project.
 
 os.chdir(inputDirectory) #First, go to the input directory and get its members

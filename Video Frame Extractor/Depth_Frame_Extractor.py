@@ -4,15 +4,15 @@ import shutil
 import sys
 
 args = sys.argv[1:]
-if(len(args) < 2):
-    print("Depth frame extractor needs absolute directory of extracted HMDB51 files and absolute directory of Depth-Anything as arguements 1 and 2 respectivly.")
+if(len(args) < 3):
+    print("Depth frame extractor needs absolute directory of extracted database files, absolute directory of Depth-Anything, and an absolute directory to place the output folder in as arguements 1, 2, and 3 respectivly.")
     sys.exit(-1)
-elif (len(args)> 2):
+elif (len(args)> 3):
     print("Depth frame extractor ignoring additional/extra arguements.")
 
 inputDirectory = args[0] #The absolute directory where the input video dataset is stored.
 depth_anything_directory = args[1] #The absolute directory of Depth-Anything.
-homeDirectory = os.getcwd()
+homeDirectory = args[2]
 outputDirectory = os.path.join(homeDirectory, "estimated_depths") #Spit out the depths in a folder in project.
 
 sys.path.append(depth_anything_directory)

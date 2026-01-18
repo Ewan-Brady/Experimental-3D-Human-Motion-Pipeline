@@ -152,14 +152,15 @@ def extract_3d_frames(inferencer, img_path):
 
 def main():
     args = sys.argv[1:]
-    if(len(args) == 0):
-        print("Pose estimator needs mmpose's absolute directory as an arguement.")
+    if(len(args) < 2):
+        print("Pose estimator needs mmpose's absolute directory and the absolute directory for the input/output as arguements.")
         exit()
-    elif (len(args) > 1):
+    elif (len(args) > 2):
         print("Pose estimator ignoring additional/extra arguements.")
 
     #Old args
     mmpose_path = args[0]
+    outputs_directory = args[1]
 
     config = os.path.join(mmpose_path,"td-hm_hrnet-w48_8xb32-210e_coco-256x192.py")
     checkpoint = os.path.join(mmpose_path,"td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth")
@@ -167,8 +168,8 @@ def main():
 
     #img = mmpose_path+"tests/data/coco/000000000785.jpg"
 
-    inputDirectory = os.path.join(os.getcwd(), "extracted_images") #The absolute directory where the image video frames are stored
-    outputDirectory = os.path.join(os.getcwd(), "estimated_poses") #The absolute directory where the skeleton estimations are outputted.
+    inputDirectory = os.path.join(outputs_directory, "extracted_images") #The absolute directory where the image video frames are stored
+    outputDirectory = os.path.join(outputs_directory, "estimated_poses") #The absolute directory where the skeleton estimations are outputted.
     if(not os.path.exists(outputDirectory)):
             os.makedirs(outputDirectory) #Create output directory if it does not exist
 
