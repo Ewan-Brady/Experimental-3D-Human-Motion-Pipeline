@@ -66,4 +66,5 @@
 # Make GitHub Linguist ignore generated Unity build output
 ###############################################################################
 
+*.py linguist-language=Python
 3DVideoVisualizer/** linguist-generated=true
