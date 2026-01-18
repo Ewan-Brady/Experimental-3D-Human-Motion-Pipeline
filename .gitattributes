@@ -61,3 +61,9 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+###############################################################################
+# Make GitHub Linguist ignore generated Unity build output
+###############################################################################
+
+3DVideoVisualizer/** linguist-generated=true
