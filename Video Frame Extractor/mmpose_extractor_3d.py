@@ -58,7 +58,6 @@ def extract_2d_frames(model, frames_folder_2d):
                     frame_visible = False
         
         for i4 in results.keypoints_visible[0]: #Count number of visible body parts
-            #print(i4)
             if(i4 >= bodypart_confidence_threshhold):
                 visible_body_parts+=1
         #Determine if percentage of visible body parts is below the threshhold.
@@ -165,8 +164,6 @@ def main():
     config = os.path.join(mmpose_path,"td-hm_hrnet-w48_8xb32-210e_coco-256x192.py")
     checkpoint = os.path.join(mmpose_path,"td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth")
     device = "cuda:0"
-
-    #img = mmpose_path+"tests/data/coco/000000000785.jpg"
 
     inputDirectory = os.path.join(outputs_directory, "extracted_images") #The absolute directory where the image video frames are stored
     outputDirectory = os.path.join(outputs_directory, "estimated_poses") #The absolute directory where the skeleton estimations are outputted.

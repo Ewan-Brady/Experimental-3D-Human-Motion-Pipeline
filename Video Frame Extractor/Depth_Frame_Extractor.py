@@ -80,7 +80,6 @@ def save_video_depth_frames(directory, video_path):
     i = 0
 
     if(os.path.exists(directory + ".npy")): #Skips finished files to resume.
-        #os.system('cls' if os.name == 'nt' else 'clear')
         print(("Skipping:   " + "{:05d}".format(i)), end = '\r')
         i=i+1
         return #Directory exists, skip

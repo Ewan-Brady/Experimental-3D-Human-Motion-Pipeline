@@ -13,7 +13,6 @@ from scipy.spatial.transform import Slerp
 depth_multiplier = 2 #Can be any number, set it to two as I think it makes pointclouds look better/more accurate
 FOV = 53 * math.pi/180
 frame_dividor = 3
-#depth_threshhold_fraction = 2/3
 
 def convert_directory(image_directory, depth_directory, video_name):
     to_return = []
@@ -38,21 +37,17 @@ def convert_to_pointcloud(image, depth):
     depth = cv2.resize(depth, (320, 240))
     depth = np.expand_dims(depth, axis = 2)
     depth = np.max(depth)-depth
-    
-    #depth_threshhold = np.max(depth)*depth_threshhold_fraction
-    
+        
     depth = depth * depth_multiplier
 
     cloud_preprocessed = np.concatenate([depth, image], axis = 2)
     cloud_preprocessed = np.transpose(cloud_preprocessed, (1,0,2))
-    #cloud_preprocessed = np.flip(cloud_preprocessed, axis = 0)
     cloud_preprocessed = np.flip(cloud_preprocessed, axis = 1)
     
     cloud = []
     for i in range(len(cloud_preprocessed)):
         for j in range(len(cloud_preprocessed[i])):
             if(i%frame_dividor==0 and j%frame_dividor==0):
-                #if(cloud_preprocessed[i][j][0] < depth_threshhold):
                 xy_point = np.array([i, j])
                 cloud.append(np.concatenate([xy_point, cloud_preprocessed[i][j]]))
     cloud = np.stack(cloud)
@@ -74,22 +69,6 @@ def cloud_FOV_spread(array, angle_horizontal, angle_vertical, width, height):
 
     array[:, 0] = direction_vectors[:, 0] * magnitudes
     array[:, 1] = direction_vectors[:, 1] * magnitudes
-
-    """
-    OLD, less optimized spread code. Makes whole program run at about half the speed based on a brief test (covered 7 videos in 2 minutes as opposed to 14)
-    for point in array:
-        magnitude = np.sqrt(np.sum(np.square(np.array([(point[0]-height_middle), (point[1]-width_middle), point[2]]))))
-        direction_vector = np.array([point[0],point[1],0])-np.array([height_middle,width_middle,POVDepth])
-        direction_vector = direction_vector/np.sqrt(np.sum(np.square(direction_vector)))
-        #print(point[0])
-
-        direction_vector = direction_vector*magnitude#(point[2]+POVDepth)#magnitude #Now this should be the new point
-
-        point[0] = direction_vector[0]
-        point[1] = direction_vector[1]
-                
-        #point[2] = direction_vector[2] #THIS WAS COMMENTED OUT BEFORE
-    """
     
     return array
 
@@ -104,12 +83,6 @@ def numpy_to_text(array):
     toreturn = ""
     points = []
     for i in array:
-        #replacement = str(i)
-        #replacement = replacement.replace("[", "")
-        #replacement = replacement.replace("]", "")
-        #replacement.replace(" ", ",")
-        #replacement = replacement.replace(". ", ",")
-        #replacement = replacement.replace(".", "")
         replacement = ""
         nums = []
         for j in i:
@@ -236,26 +209,7 @@ def process_data(skeleton_file_2d, skeleton_file_3d, depth_directory, point_clou
                 clip_gaps.append(num_previous_faulty_frames)
                 num_previous_faulty_frames = 0
                 previous_frame_faulty=False
-                """
-            
-            elif(previous_frame_faulty): #A small enough amount of previous frames were marked faulty to do a fill-in
-                
-                This segment here allows for filling in of short segments of faulty frames.
-                
-                One possible concern is this and later fill-in steps could all occur around the same area, resulting in
-                too much data being fill in. We will see if this ends up being a large issue.
-                
-                index = (len(data)-1) #Append gathered frame data to pre-existing clip.
-                for i in range(num_previous_faulty_frames+1): #Concatenate the number of faulty frames +1, all but last will be replaced with fill-in
-                    data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
-                    data[index][1] = np.concatenate([data[index][1], np.array([pose_angles_3d])], axis=0)
-                    data[index][2] = np.concatenate([data[index][2], np.array([point_cloud])], axis=0)
-                    data[index][3] = np.concatenate([data[index][3], np.array([head_pos])], axis=0)
-                    data[index][4] = np.concatenate([data[index][4], np.array([head_angle])], axis=0)
-                fill_in_slerp(data[index],(len(data[index][0])-2-num_previous_faulty_frames),(len(data[index][0])-1)) #Fill in faulty frames
-                
-                num_previous_faulty_frames = 0
-                previous_frame_faulty=False"""
+
             else:
                 index = (len(data)-1) #Append gathered frame data to pre-existing clip.
                 data[index][0] = np.concatenate([data[index][0], np.array([pose_points_3d])], axis=0)
@@ -499,25 +453,6 @@ def calculate_angle_gaps(pose_angles_3d):
     all_angle_gaps = []
     for i in range(len(pose_angles_3d[0])): #Iterate over angles
         all_angle_gaps.append(calculate_individual_angle_gaps(pose_angles_3d[:,i])) #Append angle gaps fot the desired angle
-        """
-        #Moved this to external function:
-        angle_gaps = [] #Represents the angle gaps for the 
-
-        for initial_frame_index in range((len(pose_angles_3d)-1)): #Iterate over each frame except the last
-            initial_frame = pose_angles_3d[initial_frame_index][i] #Get initial angle
-            final_frame = pose_angles_3d[initial_frame_index+1][i] #Get final angle
-            
-            intermediate_quaternion = quaternion_between_quaternions(initial_frame,final_frame)
-            
-            change_value = abs(intermediate_quaternion[3]-1) #Subtract 1 from W and get absolute value to get value that represents change in angle.
-            angle_gaps.append(change_value) #Append to gaps between each frame
-            
-        if(len(angle_gaps) > 1):
-            angle_gaps = np.array(angle_gaps) #Concatenate
-            all_angle_gaps.append(angle_gaps) #Append to gaps for each angle
-        else:
-            all_angle_gaps.append(angle_gaps) #Handles case of only one gap.
-        """    
     
     all_angle_gaps = np.stack(all_angle_gaps)
     return all_angle_gaps
@@ -636,14 +571,12 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
     """    
     head_gaps = calculate_distance_gaps(data[3]) #This is a list of the distances between frames
         
-    #mean_head, standard_deviation_head = deviations_and_mean(head_gaps)
     mean_head, standard_deviation_head = head_info
 
     """
     Now detect gaps based on sudden increases in the average distances between points, I.E. changes in the size of the individual.
     """
     pose_sizes, size_gaps = calculate_size_gaps(data[0])
-    #mean_sizes, standard_deviation_sizes = deviations_and_mean(size_gaps)
     mean_sizes, standard_deviation_sizes = pose_info
 
     
@@ -695,17 +628,6 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
         
         segment_starts_ends[i] = [initial,final]
         i+=1
-    
-    """
-    By uncommenting this you can test how the data splits in varying ways if different gap indictators are ordered.
-    contious_segment_lengths = [2,13,1,6,2]
-    segment_starts_ends = {}
-    segment_starts_ends[0] = [0,1]
-    segment_starts_ends[1] = [2,14]
-    segment_starts_ends[2] = [15,15]
-    segment_starts_ends[3] = [16,21]
-    segment_starts_ends[4] = [22,23]
-    """
     
     #This gets +1 for odd indexes and 0 for even indexes
     #It identifies whether the maximum segments index is even or odd.
@@ -821,34 +743,8 @@ def process_clip(data, fill_in_cutoff, head_info, pose_info, angle_info, head_an
         for i in range(len(data)): #remove cut off segment from data.
             data[i] = data[i][end_segment_start:,...]
     to_return.append(data)
-    
-    """
-    Can uncomment this to see how it split
-    print(contious_segment_lengths)
-    for i in to_return:
-        print(str(i[0].shape) + " " + str(i[1].shape) + " " + str(i[2].shape) + " " + str(i[3].shape))
-    """ 
 
     return to_return
-
-"""
-In a given clip, fills inbetween two frames (exclusive, I.E. the frames in between start and end),
-assuming the frames in between are corrupted in some way and are not to be used so need to be filled-in by estimations.
-It can only fill in a max of two frames.
-
-"""
-def fill_in_frames(clip, start, end):
-    if(end-start > 3):
-        raise Exception("Fill-ins for lengths of more than 2 is not yet implemented.")
-    if(end-start <= 1):
-        raise Exception("Must be at least one frame to fill in.")
-    
-    for i in range(len(clip)):
-        clip[i][(start+1)] = clip[i][(start)] #Replace first frame with previous frame
-        if(end-start == 3):
-            clip[i][(end-1)] = clip[i][(end)] #Replace second frame with following frame if second frame is to be replaced.
-
-    return clip
 
 """
 Extrapolates intermediate frames by quaternion angle changes found by slerp
@@ -1109,7 +1005,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             depth = depth_frame[xloc][yloc].item() #get the depth at that point
             extrapolated_2d_points.append(np.array([xloc,yloc,depth])) 
         except:
-            #print("The 2d pose point was out of frame!")
             extrapolated_2d_points.append(np.array([xloc,yloc,-1])) #append this to indicate that the point is out of frame, do not use
     extrapolated_2d_points = np.stack(extrapolated_2d_points) #Stack limb points into a mini pointcloud.
     
@@ -1185,10 +1080,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
             new_extrapolated_position = (pose_vector_3D/np.sqrt(np.sum(np.square(pose_vector_3D))))*mini_conversionfactor + head_pos_2D
             extrapolated_2d_points[point] = new_extrapolated_position
     
-    #extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) 
-
-    #extrapolated_2d_points = cloud_FOV_spread(extrapolated_2d_points, FOV, FOV, 320, 240) #Do FOV spread on limb points
-
     for i in common_points_2d_3d: #Loop through each point
         uncovered_points.remove(i) #This point is being covered, remove it from uncovered
         for i2 in uncovered_points: #Loop through points that have not been covered yet
@@ -1201,7 +1092,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
 
 
     conversion_factor = sum_2d/sum_3d #multiply this conversion factor by 3d length to convert it to a 2d length
-    #print("Conversion factor is: " + str(conversion_factor))
 
     """
     Use conversion factor to extrapolate pixelspace 3d points from a reference point, the conversion factor,
@@ -1209,11 +1099,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     """
     head_position = extrapolated_2d_points[0] #Using the 2D mouth as the extrapolated head position
     
-    #head_position = np.array([head_position])
-    #head_position = cloud_FOV_spread(head_position, FOV, FOV, 320, 240) #Spread head location
-    #head_position = head_position[0]
-    
-    #print(head_position)
     pixelspace_points_3d = []
     for i in range(len(pose_frame_3d)):
         if(i==9):
@@ -1251,19 +1136,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     
     pixelspace_points_3d.append(head_point) #append head point as the final element (element 17)
 
-
-    """
-    z_dividedby_xy_ratios = [] 
-    for i in pixelspace_points_3d:
-        for i2 in pixelspace_points_3d:
-            if not np.array_equal(i2,i):
-                xy_vector = np.array([i[0],i[1]])-np.array([i2[0],i2[1]])
-                xy_distance = np.sqrt(np.sum(np.square(xy_vector)))
-                z_distance = abs(i[2]-i2[2])
-                z_dividedby_xy_ratios.append((z_distance/xy_distance))
-    average_z_xy_ratio = sum(z_dividedby_xy_ratios)/len(z_dividedby_xy_ratios)
-
-    """
     
     """
     Stack found pixelspace 3d points and spread.
@@ -1275,31 +1147,6 @@ def from_2d_get_3d(pose_frame_3d, pose_frame_2d, depth_frame):
     displacement_factor = new_pixelspace_head-pixelspace_points_3d[17] #Update pose points to be relative to new head position
     pixelspace_points_3d = pixelspace_points_3d+displacement_factor #Update pose points to be relative to new head position
 
-    """
-    #pixelspace_points_3d = cloud_FOV_spread(pixelspace_points_3d, FOV, FOV, 320, 240) #Do FOV spread on limb points
-
-    xy_distances = [] 
-    z_distances = []
-    for i in pixelspace_points_3d:
-        for i2 in pixelspace_points_3d:
-            if not np.array_equal(i2,i):
-                xy_vector = np.array([i[0],i[1]])-np.array([i2[0],i2[1]])
-                xy_distance = np.sqrt(np.sum(np.square(xy_vector)))
-                z_distance = abs(i[2]-i2[2])
-                xy_distances.append((xy_distance))
-                z_distances.append(z_distance)
-    new_average_xy_distance = sum(xy_distances)/len(xy_distances)
-    new_average_z_distance = sum(z_distances)/len(z_distances)
-
-    new_desired_z_distance = new_average_xy_distance*average_z_xy_ratio
-    new_z_multiplier = new_desired_z_distance/new_average_z_distance
-    
-    for i in pixelspace_points_3d:
-        i[2] *= new_z_multiplier
-
-    #
-    Return pixelspace points and z multiplier.
-    """
     return pixelspace_points_3d, 1#new_z_multiplier
 
 
@@ -1460,7 +1307,6 @@ def get_3d_angles(keypoints_3d):
         
         initial_quaternion = np.array([0,0,0,1])
 
-        #quaternion_angles.append(final_quaternion)
         quaternion_angles.append(quaternion_between_quaternions(initial_quaternion,final_quaternion)) #Append quaternion to go from one to the other
         
     quaternion_angles = np.stack(quaternion_angles)
@@ -1540,7 +1386,6 @@ The frame extraction function however works for whatever, it just spits out its 
 into whatever is set as the current directory for the program, and you can feed an absolute path
 into the function as input. 
 """
-
 def from_data_iterator(inputs_directory, output_directory):
     homeDirectory = inputs_directory
     covered_list_file = os.path.join(homeDirectory, "PointCloudsCoveredList.txt")
@@ -1605,13 +1450,6 @@ def from_data_iterator(inputs_directory, output_directory):
                 
 
             to_check = os.path.join(action_output_directory, video)
-            
-            """
-            This bit of code is usefuk to uncomment if you are redoing data collection and you want to make sure clips that are known
-            to not make it past filters are discarded, run it over the old data.
-            if(not os.path.exists(os.path.join(to_check, "_clip_0", "pointcloud.npy"))):
-                add_to_covered_list(to_check)            
-            """
 
             if(os.path.exists(os.path.join(to_check, "_clip_0", "pointcloud.npy")) or checK_covered_list(to_check)): #Skips finished files to resume.
                 skip_occured = True

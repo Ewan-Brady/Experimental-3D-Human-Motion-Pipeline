@@ -374,3 +374,5 @@ FodyWeavers.xsd
 /Video Frame Extractor/test2.txt
 /Video Frame Extractor/test.txt
 Video Frame Extractor/PointCloudsCoveredList.txt
+Video Frame Extractor/td-hm_hrnet-w48_8xb32-210e_coco-256x192-0e67c616_20220913.pth
+Video Frame Extractor/td-hm_hrnet-w48_8xb32-210e_coco-256x192.py
