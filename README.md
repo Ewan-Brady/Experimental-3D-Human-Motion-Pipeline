@@ -83,9 +83,9 @@ To visualize the clip using the text files, you need the visualizer program. The
 
 ## Running individual parts
 These are the commands to run the individual steps of the pipeline (remember, use absolute directories not relative):
-python3 Video_Frame_Extractor.py <input-directory> <output-directory>
-python3 mmpose_extractor_3d.py <mmpose-model-directory> <input/output-directory>
-python3 Depth_Frame_Extractor.py <input-directory> <Depth-Anything-directory> <output-directory>
-python3 PointCloudCreator.py <input-directory> <output-directory>
+* python3 Video_Frame_Extractor.py <input-directory> <output-directory>
+* python3 mmpose_extractor_3d.py <mmpose-model-directory> <input/output-directory>
+* python3 Depth_Frame_Extractor.py <input-directory> <Depth-Anything-directory> <output-directory>
+* python3 PointCloudCreator.py <input-directory> <output-directory>
 
 Note mmpose_extractor_3d.py needs the outputs of Video_Frame_Extractor.py in <input/output-directory> use as its input, and PointCloudCreator.py requires the outputs of mmpose_extractor_3d.py, Video_Frame_Extractor.py, and Depth_Frame_Extractor.py in <input-directory> to use as it's input.
